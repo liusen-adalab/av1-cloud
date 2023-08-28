@@ -1,0 +1,6 @@
+[http_server]
+bind = "0.0.0.0"
+port = 5991
+
+[log]
+level = "debug"
