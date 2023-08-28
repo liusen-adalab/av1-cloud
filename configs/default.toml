@@ -2,5 +2,34 @@
 bind = "0.0.0.0"
 port = 5991
 
+[http_server.session]
+url = "redis://127.0.0.1:6379"
+secure = false
+http_only = false
+max_age_secs = 3600_00
+
 [log]
 level = "debug"
+
+
+[keydb]
+keydb_urls = [
+    "redis://10.0.10.70/",
+    "redis://10.0.10.71/",
+    "redis://10.0.10.72/",
+]
+
+[postgres]
+url = "postgresql://postgres:password@127.0.0.1:54324/av1_cloud"
+min_conn = 1
+max_conn = 50
+
+
+[email_code]
+from_full = "test <test@orientphoenix.com>"
+from_addr = "test@orientphoenix.com"
+password = "OUIl6zlHPmVM03cj"
+server = "smtp.feishu.cn"
+port = 465
+subject = "验证码"
+template_file = "./configs/email_code_template.html"

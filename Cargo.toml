@@ -5,27 +5,65 @@ edition = "2021"
 
 
 [workspace]
+members = ["utils"]
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
-[dependencies]
-actix-web = "4.3.1"
+[workspace.dependencies]
 anyhow = "1.0.75"
-config = { version = "0.13.3", default-features = false, features = ["toml"] }
 derive_more = { version = "0.99.17", default-features = false, features = [
     "display",
+    "from",
+    "deref",
 ] }
-paste = "1.0.14"
+diesel = { version = "2.1.1", features = ["postgres", "chrono"] }
+diesel-async = { version = "0.3.2", features = ["deadpool", "postgres"] }
+redis = { version = "0.23.2", features = ["tokio", "aio", "tokio-comp"] }
 serde = { version = "1.0.188", features = ["derive"] }
-serde_json = "1.0.105"
-time = { version = "0.3.28", features = ["macros"] }
 tokio = { version = "1.32.0", features = ["full"] }
+
+[dependencies]
+chrono = { version = "0.4.26" }
+actix-web = "4.3.1"
+anyhow.workspace = true
+argon2 = { version = "0.5.1", features = ["std"] }
+config = { version = "0.13.3", default-features = false, features = ["toml"] }
+derive_more.workspace = true
+diesel.workspace = true
+diesel-async.workspace = true
+flaken = "0.2.2"
+getset = "0.1.2"
+paste = "1.0.14"
+rand = "0.8.5"
+serde.workspace = true
+serde_json = "1.0.105"
+serde_with = "3.3.0"
+time = { version = "0.3.28", features = ["macros"] }
+tokio.workspace = true
 tracing = "0.1.37"
 tracing-subscriber = { version = "0.3.17", features = [
     "local-time",
     "env-filter",
 ] }
+utils = { version = "0.1.0", path = "utils" }
+
+lettre = { version = "0.10.4", default-features = false, features = [
+    "tokio1-rustls-tls",
+    "builder",
+    "smtp-transport",
+] }
+redis.workspace = true
+actix-session = { version = "0.7.2", features = ["redis-rs-session"] }
+actix-identity = "0.5.2"
+email_address = { version = "0.2.4", default-features = false }
 
 [dev-dependencies]
-reqwest = "0.11.20"
+# 必须使用 rustls，因为 arch 系统的 openssl 产生了不兼容的更改
+reqwest = { version = "0.11.20", default-features = false, features = [
+    "rustls-tls",
+] }
 tracing-test = "0.2.4"
+
+
+[features]
+default = ["keydb"]
+keydb = ["utils/keydb"]
+redis = ["utils/redis"]

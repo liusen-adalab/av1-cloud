@@ -2,18 +2,44 @@ use std::sync::OnceLock;
 
 use anyhow::{Context, Result};
 use config::Config;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
+
+use crate::infrastructure::email::EmailCode;
 
 #[derive(Deserialize, Debug)]
 pub struct Settings {
     pub log: crate::logger::Config,
     pub http_server: HttpServer,
+
+    #[cfg(feature = "keydb")]
+    #[serde(rename = "keydb")]
+    pub redis: utils::db_pools::keydb::Config,
+    #[cfg(feature = "redis")]
+    pub redis: utils::db_pools::redis::Config,
+
+    pub postgres: utils::db_pools::postgres::PgPoolConfig,
+
+    pub email_code: EmailCode,
 }
 
 #[derive(Deserialize, Debug)]
 pub struct HttpServer {
     pub bind: String,
     pub port: u16,
+    pub session: SessionRedis,
+}
+
+#[derive(Default, Debug, Serialize, Deserialize)]
+pub struct SessionRedis {
+    pub url: String,
+    pub secure: bool,
+    pub http_only: bool,
+    #[serde(default = "default_max_age")]
+    pub max_age_secs: u32,
+}
+
+fn default_max_age() -> u32 {
+    3600 * 24
 }
 
 static SETTINGS: OnceLock<Settings> = OnceLock::new();

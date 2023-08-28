@@ -6,6 +6,9 @@ use serde::Serialize;
 type Result<T, E = ApiError> = std::result::Result<T, E>;
 pub type JsonResponse<T> = Result<Json<ApiResponse<T>>>;
 
+type StdResult<T, E> = std::result::Result<T, E>;
+pub type BizResult<T, E> = StdResult<StdResult<T, E>, anyhow::Error>;
+
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ApiResponse<T: Serialize> {
@@ -27,7 +30,11 @@ impl<T: Serialize> ApiResponse<T> {
     }
 }
 
+#[test]
+fn aa() {}
+
 #[derive(derive_more::Display, Debug)]
+#[display(fmt = "bad request: {msg}")]
 pub struct ApiError {
     msg: Box<dyn HttpBizError>,
 }
@@ -43,6 +50,9 @@ pub trait HttpBizError: Display + Debug + Send + Sync + 'static {
         1
     }
 }
+
+impl HttpBizError for std::num::ParseIntError {}
+impl HttpBizError for anyhow::Error {}
 
 impl<T> From<T> for ApiError
 where
@@ -145,24 +155,23 @@ macro_rules! code {
                 }
             }
 
-
-
-
             #[derive(Debug, Copy, Clone)]
             pub struct Document {
                 pub err: Err,
                 pub endpoint: &'static str
             }
 
-
             $(
                 #[allow(non_snake_case)]
                 #[derive(Debug, Copy, Clone)]
                 pub struct $pub_err {
-                    $($pub_err_item: Err,)*
+                    $(pub $pub_err_item: Err,)*
                 }
 
                 crate::err_items!({$mod_name, $pub_err}, $pub_code, $($pub_err_item,)*);
+                paste::paste! {
+                    pub static [< $pub_err:snake:upper >]: $pub_err = $pub_err::generate();
+                }
 
                 impl $pub_err {
                     pub const fn generate() -> Self {
@@ -182,7 +191,7 @@ macro_rules! code {
             })*
             );
 
-            code!(@build_endpoint {$mod_name, $index * 100}, $($tts)*);
+            crate::code!(@build_endpoint {$mod_name, $index * 100}, $($tts)*);
 
             pub fn err_list() -> Vec<Document> {
                 let mut doc_pub = doc_pub();
@@ -211,8 +220,8 @@ macro_rules! code {
     };
 
     (@build_endpoint {$mod_name:expr, $cur_endpoint_index:expr }, $endpoint:ident {$($fields:tt)*} $($tts:tt)* ) => {
-        build_endpoint!(@build_endpoint {$mod_name, []}, {$endpoint, $cur_endpoint_index * 100,} $($fields)*,);
-        code!(@build_endpoint {$mod_name, ($cur_endpoint_index + 1)}, $($tts)*);
+       crate::build_endpoint!(@build_endpoint {$mod_name, []}, {$endpoint, $cur_endpoint_index * 100,} $($fields)*,);
+       crate:: code!(@build_endpoint {$mod_name, ($cur_endpoint_index + 1)}, $($tts)*);
     };
 
     (@build_endpoint {$mod_name:expr, $cur_endpoint_index:expr }, $(,)? ) => {
@@ -316,7 +325,7 @@ macro_rules! build_endpoint {
         }
 
         paste::paste!{
-            build_endpoint!{
+           crate::build_endpoint!{
                 @build_endpoint
                 {
                     $mod_name,
@@ -363,7 +372,7 @@ macro_rules! build_endpoint {
     $($tail:tt)*
     ) => {
         paste::paste!{
-            build_endpoint!{
+          crate::build_endpoint!{
                 @build_endpoint
                 {
                     $mod_name,

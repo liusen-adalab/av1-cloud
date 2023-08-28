@@ -1,0 +1,22 @@
+[package]
+name = "utils"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+anyhow.workspace = true
+deadpool-redis = { version = "0.12.0", optional = true }
+derive_more.workspace = true
+diesel.workspace = true
+diesel-async.workspace = true
+redis.workspace = true
+serde.workspace = true
+tokio.workspace = true
+
+
+[features]
+default = []
+keydb = ["redis/cluster-async"]
+redis = ["dep:deadpool-redis"]
