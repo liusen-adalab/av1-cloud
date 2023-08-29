@@ -11,6 +11,7 @@ use crate::{biz_ok, ensure_biz, ensure_ok, http::BizResult, infrastructure::repo
 use self::service::LoginErr;
 
 pub mod service;
+pub mod service_email;
 
 pub type UserId = i64;
 
@@ -141,9 +142,6 @@ impl Password {
         let hashsed = &PasswordHash::new(&self.0).unwrap();
         Argon2::default()
             .verify_password(password.as_bytes(), hashsed)
-            .map_err(|err| {
-                warn!(%err, "password verify failed");
-            })
             .is_ok()
     }
 

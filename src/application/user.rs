@@ -2,14 +2,14 @@ use serde::Deserialize;
 use utils::db_pools::postgres::pg_conn;
 
 use crate::{
-    biz_ok,
     domain::user::{
         service::{self, login_tx, LoginErr, RegisterErr},
-        Email, EmailFormatErr, Password, User, UserId,
+        service_email::{self, SendEmailCodeErr},
+        Email, Password, User, UserId,
     },
     ensure_biz,
     http::BizResult,
-    infrastructure::{self, repo_user},
+    infrastructure::repo_user,
     pg_tx, tx_func,
 };
 use anyhow::Result;
@@ -54,13 +54,7 @@ pub async fn logout(id: UserId) -> anyhow::Result<()> {
     tx_func!(service::logout_tx, id)
 }
 
-#[derive(derive_more::From)]
-pub enum SendEmailCodeErr {
-    Email(EmailFormatErr),
-}
-
 pub async fn send_email_code(email: String, fake: bool) -> BizResult<(), SendEmailCodeErr> {
     let email = ensure_biz!(Email::try_from(email));
-    infrastructure::email::send_code(&email, fake).await?;
-    biz_ok!(())
+    service_email::send_email_code(email, fake).await
 }

@@ -6,9 +6,12 @@ use actix_web::{
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    application::user::{self, LoginDto, SendEmailCodeErr, UserDto},
+    application::user::{self, LoginDto, UserDto},
     code,
-    domain::user::service::{LoginErr, RegisterErr},
+    domain::user::{
+        service::{LoginErr, RegisterErr},
+        service_email::SendEmailCodeErr,
+    },
     http::{ApiError, ApiResponse, JsonResponse},
 };
 
@@ -49,7 +52,8 @@ code! {
     }
 
     SendEmailCode {
-        use EmailFormat
+        use EmailFormat,
+        too_frequent
     }
 }
 
@@ -103,6 +107,7 @@ impl From<SendEmailCodeErr> for ApiError {
     fn from(value: SendEmailCodeErr) -> Self {
         match value {
             SendEmailCodeErr::Email(e) => email_err!(e),
+            SendEmailCodeErr::TooFrequent => SEND_EMAIL_CODE.too_frequent.into(),
         }
     }
 }

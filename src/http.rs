@@ -434,7 +434,7 @@ macro_rules! build_endpoint {
                 ]
             }
 
-            pub static [< $endpoint:upper >]: $endpoint = $endpoint {
+            pub static [< $endpoint:snake:upper >]: $endpoint = $endpoint {
                 $($field_name: $named_ty::generate(),)*
             };
         }
