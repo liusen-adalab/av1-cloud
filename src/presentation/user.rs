@@ -10,7 +10,7 @@ use crate::{
     code,
     domain::user::{
         service::{LoginErr, RegisterErr},
-        service_email::SendEmailCodeErr,
+        service_email::{CheckEmailCodeErr, SendEmailCodeErr},
     },
     http::{ApiError, ApiResponse, JsonResponse},
 };
@@ -54,6 +54,10 @@ code! {
     SendEmailCode {
         use EmailFormat,
         too_frequent
+    }
+
+    CheckEmailCode {
+        no_email_code
     }
 }
 
@@ -122,15 +126,25 @@ impl From<LoginErr> for ApiError {
     }
 }
 
+impl From<CheckEmailCodeErr> for ApiError {
+    fn from(value: CheckEmailCodeErr) -> Self {
+        match value {
+            CheckEmailCodeErr::Email(e) => email_err!(e),
+            CheckEmailCodeErr::NoEmailCode => CHECK_EMAIL_CODE.no_email_code.into(),
+        }
+    }
+}
+
 pub fn config(cfg: &mut web::ServiceConfig) {
     cfg.service(
         web::scope("/api/user")
             .service(web::resource("/check_register").route(web::get().to(check_register)))
+            .service(web::resource("/check_email_code").route(web::get().to(check_email_code)))
             .service(web::resource("/register").route(web::post().to(register)))
             .service(web::resource("/login").route(web::post().to(login)))
             .service(web::resource("/ping").route(web::get().to(user_ping)))
             .service(web::resource("/logout").route(web::post().to(logout)))
-            .service(web::resource("/email_code").route(web::get().to(send_email_code))),
+            .service(web::resource("/send_email_code").route(web::get().to(send_email_code))),
     );
 }
 
@@ -156,26 +170,48 @@ pub(crate) async fn check_register(
     })
 }
 
-pub async fn register(params: Json<UserDto>, req: HttpRequest) -> JsonResponse<()> {
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CheckEmailCodeParams {
+    email: String,
+    code: String,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CheckEmailCodeResp {
+    valid: bool,
+}
+
+pub(crate) async fn check_email_code(
+    params: Query<CheckEmailCodeParams>,
+) -> JsonResponse<CheckEmailCodeResp> {
+    let CheckEmailCodeParams { email, code } = params.into_inner();
+    let valid = user::check_email_code(email, code).await??;
+
+    ApiResponse::Ok(CheckEmailCodeResp { valid })
+}
+
+pub(crate) async fn register(params: Json<UserDto>, req: HttpRequest) -> JsonResponse<()> {
     let id = user::register(params.into_inner()).await??;
     Identity::login(&req.extensions(), id.to_string())?;
     ApiResponse::Ok(())
 }
 
-pub async fn login(params: Json<LoginDto>, req: HttpRequest) -> JsonResponse<()> {
+pub(crate) async fn login(params: Json<LoginDto>, req: HttpRequest) -> JsonResponse<()> {
     let id = user::login(params.into_inner()).await??;
     Identity::login(&req.extensions(), id.to_string())?;
     ApiResponse::Ok(())
 }
 
-pub async fn logout(id: Identity) -> JsonResponse<()> {
+pub(crate) async fn logout(id: Identity) -> JsonResponse<()> {
     let user_id = id.id()?.parse()?;
     user::logout(user_id).await?;
     id.logout();
     ApiResponse::Ok(())
 }
 
-pub async fn user_ping(_id: Identity) -> &'static str {
+pub(crate) async fn user_ping(_id: Identity) -> &'static str {
     "pong"
 }
 

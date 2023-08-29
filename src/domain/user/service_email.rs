@@ -1,5 +1,5 @@
 use crate::{
-    biz_ok, domain::user::Email, ensure_biz, http::BizResult, infrastructure,
+    biz_ok, domain::user::Email, ensure_biz, ensure_exist, http::BizResult, infrastructure,
     redis_conn_switch::redis_conn,
 };
 
@@ -23,4 +23,16 @@ pub async fn send_email_code(email: Email, fake: bool) -> BizResult<(), SendEmai
     infrastructure::email::send_code(&email, fake).await?;
 
     biz_ok!(())
+}
+
+#[derive(derive_more::From)]
+pub enum CheckEmailCodeErr {
+    Email(EmailFormatErr),
+    NoEmailCode,
+}
+
+pub async fn check_email_code(email: Email, code: &str) -> BizResult<bool, CheckEmailCodeErr> {
+    let sent_code = infrastructure::email::retrive_sent_code(&**email).await?;
+    let sent_code = ensure_exist!(sent_code, CheckEmailCodeErr::NoEmailCode);
+    biz_ok!(sent_code == code)
 }

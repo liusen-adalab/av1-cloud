@@ -4,7 +4,7 @@ use utils::db_pools::postgres::pg_conn;
 use crate::{
     domain::user::{
         service::{self, login_tx, LoginErr, RegisterErr},
-        service_email::{self, SendEmailCodeErr},
+        service_email::{self, CheckEmailCodeErr, SendEmailCodeErr},
         Email, Password, User, UserId,
     },
     ensure_biz,
@@ -21,6 +21,11 @@ pub async fn is_email_registerd(email: String) -> Result<bool> {
     let conn = &mut pg_conn().await?;
     let exist = repo_user::exist(&email, conn).await?;
     Ok(exist)
+}
+
+pub async fn check_email_code(email: String, code: String) -> BizResult<bool, CheckEmailCodeErr> {
+    let email = ensure_biz!(Email::try_from(email));
+    service_email::check_email_code(email, &code).await
 }
 
 #[derive(Deserialize)]
