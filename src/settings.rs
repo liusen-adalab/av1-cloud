@@ -44,12 +44,12 @@ fn default_max_age() -> u32 {
 
 static SETTINGS: OnceLock<Settings> = OnceLock::new();
 
-pub fn load_settings(path: Option<&str>) -> Result<&'static Settings> {
-    println!("loading settings. path = {:?}", path);
-    let path = path.unwrap_or_default();
+pub fn load_settings(cfg_path: Option<&str>) -> Result<&'static Settings> {
+    println!("loading settings. path = {:?}", cfg_path);
+    let path = cfg_path.unwrap_or_default();
     let settings = Config::builder()
         .add_source(config::File::with_name("configs/default.toml").required(false))
-        .add_source(config::File::with_name(path).required(false))
+        .add_source(config::File::with_name(path).required(cfg_path.is_some()))
         .add_source(config::Environment::with_prefix("AV1"))
         .build()
         .context("cannot load config")?;

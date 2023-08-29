@@ -19,9 +19,10 @@ keydb_urls = [
 ]
 
 [postgres]
-url = "postgresql://postgres:password@127.0.0.1:54324/av1_cloud"
+url = "postgresql://postgres:password@10.0.10.3:30020/av1_cloud"
 min_conn = 1
 max_conn = 50
+
 
 [email_code]
 from_full = "test <test@orientphoenix.com>"

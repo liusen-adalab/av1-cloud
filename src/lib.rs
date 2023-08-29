@@ -65,7 +65,14 @@ pub async fn http_ping() -> &'static str {
 }
 
 pub async fn init_global() -> Result<()> {
-    let settings = load_settings(None)?;
+    let args: Vec<_> = std::env::args().collect();
+    let cfg_path = if args.len() > 1 {
+        Some(&*args[1])
+    } else {
+        None
+    };
+
+    let settings = load_settings(cfg_path)?;
     logger::init(&settings.log)?;
 
     infrastructure::email::load_email_code_template().context("load email-code-template")?;
