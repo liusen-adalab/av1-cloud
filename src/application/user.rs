@@ -1,4 +1,5 @@
 use serde::Deserialize;
+use utils::db_pools::postgres::pg_conn;
 
 use crate::{
     biz_ok,
@@ -8,8 +9,19 @@ use crate::{
     },
     ensure_biz,
     http::BizResult,
-    infrastructure, pg_tx, tx_func,
+    infrastructure::{self, repo_user},
+    pg_tx, tx_func,
 };
+use anyhow::Result;
+
+pub async fn is_email_registerd(email: String) -> Result<bool> {
+    let Ok(email) = Email::try_from(email) else {
+        return Ok(false);
+    };
+    let conn = &mut pg_conn().await?;
+    let exist = repo_user::exist(&email, conn).await?;
+    Ok(exist)
+}
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]

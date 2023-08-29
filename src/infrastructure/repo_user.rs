@@ -105,3 +105,26 @@ where
         }
     }
 }
+
+pub(crate) async fn exist<'a, T>(id: T, conn: &mut PgConn) -> Result<bool>
+where
+    UserFindId<'a>: From<T>,
+{
+    macro_rules! get_result {
+        ($filter:expr) => {{
+            let exist = diesel::select(diesel::dsl::exists(users::table.filter($filter)))
+                .get_result(conn)
+                .await?;
+            Ok(exist)
+        }};
+    }
+
+    match UserFindId::from(id) {
+        UserFindId::Email(email) => {
+            get_result!(users::email.eq(&**email))
+        }
+        UserFindId::Id(id) => {
+            get_result!(users::id.eq(id))
+        }
+    }
+}

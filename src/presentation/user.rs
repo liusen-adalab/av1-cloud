@@ -3,7 +3,7 @@ use actix_web::{
     web::{self, Json, Query},
     HttpMessage, HttpRequest,
 };
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use crate::{
     application::user::{self, LoginDto, SendEmailCodeErr, UserDto},
@@ -120,12 +120,35 @@ impl From<LoginErr> for ApiError {
 pub fn config(cfg: &mut web::ServiceConfig) {
     cfg.service(
         web::scope("/api/user")
+            .service(web::resource("/check_register").route(web::get().to(check_register)))
             .service(web::resource("/register").route(web::post().to(register)))
             .service(web::resource("/login").route(web::post().to(login)))
             .service(web::resource("/ping").route(web::get().to(user_ping)))
             .service(web::resource("/logout").route(web::post().to(logout)))
             .service(web::resource("/email_code").route(web::get().to(send_email_code))),
     );
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CheckRgisterdParams {
+    email: String,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CheckRgisterdResp {
+    is_registered: bool,
+}
+
+pub(crate) async fn check_register(
+    params: Query<CheckRgisterdParams>,
+) -> JsonResponse<CheckRgisterdResp> {
+    let CheckRgisterdParams { email } = params.into_inner();
+    let registerd = user::is_email_registerd(email).await?;
+    ApiResponse::Ok(CheckRgisterdResp {
+        is_registered: registerd,
+    })
 }
 
 pub async fn register(params: Json<UserDto>, req: HttpRequest) -> JsonResponse<()> {
@@ -152,6 +175,7 @@ pub async fn user_ping(_id: Identity) -> &'static str {
 }
 
 #[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct SendEmailCodeParams {
     email: String,
     #[serde(default)]
