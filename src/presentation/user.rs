@@ -138,6 +138,7 @@ impl From<CheckEmailCodeErr> for ApiError {
 pub fn config(cfg: &mut web::ServiceConfig) {
     cfg.service(
         web::scope("/api/user")
+            .service(web::resource("/doc").route(web::get().to(get_resp_status_doc)))
             .service(web::resource("/check_register").route(web::get().to(check_register)))
             .service(web::resource("/check_email_code").route(web::get().to(check_email_code)))
             .service(web::resource("/register").route(web::post().to(register)))
@@ -146,6 +147,25 @@ pub fn config(cfg: &mut web::ServiceConfig) {
             .service(web::resource("/logout").route(web::post().to(logout)))
             .service(web::resource("/send_email_code").route(web::get().to(send_email_code))),
     );
+}
+
+#[derive(Serialize)]
+pub struct StatusCode {
+    code: u32,
+    msg: &'static str,
+    endpoint: &'static str,
+}
+
+pub async fn get_resp_status_doc() -> JsonResponse<Vec<StatusCode>> {
+    let doc = document()
+        .into_iter()
+        .map(|d| StatusCode {
+            code: d.0,
+            endpoint: d.1,
+            msg: d.2,
+        })
+        .collect();
+    ApiResponse::Ok(doc)
 }
 
 #[derive(Deserialize)]
