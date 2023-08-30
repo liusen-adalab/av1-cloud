@@ -82,6 +82,14 @@ impl<'a> EmailCodeSender<'a> {
         Ok(())
     }
 
+    pub async fn verify_email_code(email: &str, code: &str) -> Result<bool> {
+        let Some(sent_code) = Self::get_sent_code(email).await? else {
+            return Ok(false);
+        };
+
+        Ok(sent_code.to_string() == code)
+    }
+
     /// 获取已发送给 `email` 的验证码
     ///
     /// # Notes

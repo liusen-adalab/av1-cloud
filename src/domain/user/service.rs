@@ -6,11 +6,15 @@ use crate::{
     domain::user::Email,
     ensure_biz, ensure_exist,
     http::BizResult,
-    infrastructure::{email, repo_user},
+    infrastructure::{
+        email::{self, EmailCodeSender},
+        repo_user,
+    },
     pg_tx,
 };
+use derive_more::From;
 
-use super::{EmailFormatErr, PasswordFormatErr, User, UserId, UserNameFormatErr};
+use super::{EmailFormatErr, Password, PasswordFormatErr, User, UserId, UserNameFormatErr};
 
 #[derive(derive_more::From)]
 pub enum RegisterErr {
@@ -70,4 +74,40 @@ pub async fn logout_tx(user_id: UserId, conn: &mut PgConn) -> anyhow::Result<()>
     repo_user::update(&user, conn).await?;
 
     Ok(())
+}
+
+#[derive(From)]
+pub enum ResetPasswordErr {
+    Password(PasswordFormatErr),
+    Email(EmailFormatErr),
+    CodeNotMatch,
+    NotFound,
+}
+
+pub async fn reset_password(
+    email: Email,
+    new_password: Password,
+    email_code: String,
+) -> BizResult<(), ResetPasswordErr> {
+    ensure_biz!(
+        EmailCodeSender::verify_email_code(&email, &email_code).await?,
+        ResetPasswordErr::CodeNotMatch
+    );
+    pg_tx!(reset_password_tx, email, new_password)
+}
+
+pub async fn reset_password_tx(
+    email: Email,
+    new_password: Password,
+    conn: &mut PgConn,
+) -> BizResult<(), ResetPasswordErr> {
+    let mut user = ensure_exist!(
+        repo_user::find(&email, conn).await?,
+        ResetPasswordErr::NotFound
+    );
+    user.set_password(new_password);
+
+    repo_user::update(&user, conn).await?;
+
+    biz_ok!(())
 }

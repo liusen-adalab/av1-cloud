@@ -66,6 +66,10 @@ impl User {
     pub fn logout(&mut self) {
         self.online = false
     }
+
+    pub fn set_password(&mut self, p: Password) {
+        self.password = p
+    }
 }
 
 use derive_more::Display;
@@ -236,7 +240,7 @@ fn next_id() -> u64 {
 pub fn po_to_do(user: UserPo) -> anyhow::Result<User> {
     Ok(User {
         id: user.id,
-        name: UserName::try_from(user.name.to_string())?,
+        name: UserName::try_from(user.name.into_owned())?,
         email: Email::try_from(user.email.into_owned())?,
         password: Password(user.password.into_owned()),
         login_at: user.last_login,

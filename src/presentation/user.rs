@@ -6,10 +6,10 @@ use actix_web::{
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    application::user::{self, LoginDto, UserDto},
+    application::user::{self, LoginDto, ResetPasswordDto, UserDto},
     code,
     domain::user::{
-        service::{LoginErr, RegisterErr},
+        service::{LoginErr, RegisterErr, ResetPasswordErr},
         service_email::{CheckEmailCodeErr, SendEmailCodeErr},
     },
     http::{ApiError, ApiResponse, JsonResponse},
@@ -58,6 +58,11 @@ code! {
 
     CheckEmailCode {
         no_email_code
+    }
+
+    ResetPassword{
+        email_code_mismatch,
+        not_found
     }
 }
 
@@ -135,6 +140,17 @@ impl From<CheckEmailCodeErr> for ApiError {
     }
 }
 
+impl From<ResetPasswordErr> for ApiError {
+    fn from(value: ResetPasswordErr) -> Self {
+        match value {
+            ResetPasswordErr::Password(a) => password_err!(a),
+            ResetPasswordErr::Email(e) => email_err!(e),
+            ResetPasswordErr::CodeNotMatch => RESET_PASSWORD.email_code_mismatch.into(),
+            ResetPasswordErr::NotFound => RESET_PASSWORD.not_found.into(),
+        }
+    }
+}
+
 pub fn config(cfg: &mut web::ServiceConfig) {
     cfg.service(
         web::scope("/api/user")
@@ -145,6 +161,7 @@ pub fn config(cfg: &mut web::ServiceConfig) {
             .service(web::resource("/login").route(web::post().to(login)))
             .service(web::resource("/ping").route(web::get().to(user_ping)))
             .service(web::resource("/logout").route(web::post().to(logout)))
+            .service(web::resource("/reset_password").route(web::post().to(reset_password)))
             .service(web::resource("/send_email_code").route(web::get().to(send_email_code))),
     );
 }
@@ -247,5 +264,10 @@ pub async fn send_email_code(params: Query<SendEmailCodeParams>) -> JsonResponse
     let SendEmailCodeParams { email, fake } = params.into_inner();
 
     user::send_email_code(email, fake).await??;
+    ApiResponse::Ok(())
+}
+
+pub async fn reset_password(params: Json<ResetPasswordDto>) -> JsonResponse<()> {
+    user::reset_password(params.into_inner()).await??;
     ApiResponse::Ok(())
 }

@@ -3,7 +3,7 @@ use utils::db_pools::postgres::pg_conn;
 
 use crate::{
     domain::user::{
-        service::{self, login_tx, LoginErr, RegisterErr},
+        service::{self, login_tx, LoginErr, RegisterErr, ResetPasswordErr},
         service_email::{self, CheckEmailCodeErr, SendEmailCodeErr},
         Email, Password, User, UserId,
     },
@@ -62,4 +62,18 @@ pub async fn logout(id: UserId) -> anyhow::Result<()> {
 pub async fn send_email_code(email: String, fake: bool) -> BizResult<(), SendEmailCodeErr> {
     let email = ensure_biz!(Email::try_from(email));
     service_email::send_email_code(email, fake).await
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ResetPasswordDto {
+    email: String,
+    new_password: String,
+    email_code: String,
+}
+
+pub async fn reset_password(params: ResetPasswordDto) -> BizResult<(), ResetPasswordErr> {
+    let email = ensure_biz!(Email::try_from(params.email));
+    let new_password = ensure_biz!(Password::try_from_async(params.new_password).await);
+    service::reset_password(email, new_password, params.email_code).await
 }
