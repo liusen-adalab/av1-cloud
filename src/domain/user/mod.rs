@@ -8,7 +8,7 @@ use tracing::warn;
 
 use crate::{biz_ok, ensure_biz, ensure_ok, http::BizResult, infrastructure::repo_user::UserPo};
 
-use self::service::LoginErr;
+use self::service::{LoginErr, UpdateProfileErr, UserUpdate};
 
 pub mod service;
 pub mod service_email;
@@ -23,7 +23,7 @@ pub struct User {
     name: UserName,
     email: Email,
     password: Password,
-    mobile_number: Option<String>,
+    mobile_number: Option<Phone>,
     address: Option<String>,
     online: bool,
 
@@ -38,6 +38,21 @@ pub struct Email(String);
 
 #[derive(Debug)]
 pub struct Password(String);
+
+#[derive(derive_more::Deref, Debug)]
+pub struct Phone(String);
+
+#[derive(Display, Debug)]
+pub struct PhoneFormatErr;
+
+impl std::error::Error for PhoneFormatErr {}
+
+impl Phone {
+    pub fn try_from(phone: String) -> Result<Self, PhoneFormatErr> {
+        // TODO: check phone format
+        Ok(Self(phone))
+    }
+}
 
 impl User {
     pub fn create(email: Email, password: Password) -> Self {
@@ -67,10 +82,43 @@ impl User {
         self.online = false
     }
 
-    pub fn set_password(&mut self, p: Password) {
-        self.password = p
+    pub fn reset_password(&mut self, new: Password) {
+        self.password = new
+    }
+
+    pub async fn set_password(
+        &mut self,
+        old: String,
+        new: Password,
+    ) -> Result<(), PasswordNotMatch> {
+        ensure_ok!(self.password.verify(&old).await, PasswordNotMatch);
+        self.reset_password(new);
+        Ok(())
+    }
+
+    pub async fn update_profile(&mut self, update: UserUpdate) -> BizResult<(), UpdateProfileErr> {
+        if let Some(password) = update.password {
+            ensure_biz!(
+                self.set_password(password.old_password, password.new_password)
+                    .await
+            )
+        }
+
+        if let Some(name) = update.user_name {
+            self.name = name
+        }
+
+        self.address = update.address;
+
+        if let Some(mobile_number) = update.mobile_number {
+            self.mobile_number = Some(mobile_number)
+        }
+
+        biz_ok!(())
     }
 }
+
+pub struct PasswordNotMatch;
 
 use derive_more::Display;
 
@@ -244,7 +292,7 @@ pub fn po_to_do(user: UserPo) -> anyhow::Result<User> {
         email: Email::try_from(user.email.into_owned())?,
         password: Password(user.password.into_owned()),
         login_at: user.last_login,
-        mobile_number: user.mobile_number,
+        mobile_number: user.mobile_number.map(|n| Phone::try_from(n)).transpose()?,
         address: user.address.map(|a| a.into_owned()),
         online: user.online,
     })

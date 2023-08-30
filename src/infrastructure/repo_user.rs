@@ -3,7 +3,7 @@ use std::borrow::Cow;
 use crate::{
     domain::{
         self,
-        user::{Email, User, UserId},
+        user::{Email, Phone, User, UserId},
     },
     schema::users,
 };
@@ -79,6 +79,7 @@ impl<'a> UserPo<'a> {
 pub enum UserFindId<'a> {
     Email(&'a Email),
     Id(UserId),
+    Phone(&'a Phone),
 }
 
 use diesel::result::OptionalExtension;
@@ -107,6 +108,9 @@ where
         UserFindId::Id(id) => {
             get_result!(users::id.eq(id))
         }
+        UserFindId::Phone(phone) => {
+            get_result!(users::mobile_number.eq(&**phone))
+        }
     }
 }
 
@@ -114,10 +118,10 @@ pub(crate) async fn exist<'a, T>(id: T, conn: &mut PgConn) -> Result<bool>
 where
     UserFindId<'a>: From<T>,
 {
-    macro_rules! get_result {
-        ($filter:expr) => {{
+    macro_rules! is_exist {
+        ($filter:expr, $conn:expr) => {{
             let exist = diesel::select(diesel::dsl::exists(users::table.filter($filter)))
-                .get_result(conn)
+                .get_result($conn)
                 .await?;
             Ok(exist)
         }};
@@ -125,10 +129,13 @@ where
 
     match UserFindId::from(id) {
         UserFindId::Email(email) => {
-            get_result!(users::email.eq(&**email))
+            is_exist!(users::email.eq(&**email), conn)
         }
         UserFindId::Id(id) => {
-            get_result!(users::id.eq(id))
+            is_exist!(users::id.eq(id), conn)
+        }
+        UserFindId::Phone(phone) => {
+            is_exist!(users::mobile_number.eq(&**phone), conn)
         }
     }
 }

@@ -3,9 +3,9 @@ use utils::db_pools::postgres::pg_conn;
 
 use crate::{
     domain::user::{
-        service::{self, login_tx, LoginErr, RegisterErr, ResetPasswordErr},
+        service::{self, login_tx, LoginErr, RegisterErr, ResetPasswordErr, UpdateProfileErr},
         service_email::{self, CheckEmailCodeErr, SendEmailCodeErr},
-        Email, Password, User, UserId,
+        Email, Password, Phone, User, UserId, UserName,
     },
     ensure_biz,
     http::BizResult,
@@ -76,4 +76,65 @@ pub async fn reset_password(params: ResetPasswordDto) -> BizResult<(), ResetPass
     let email = ensure_biz!(Email::try_from(params.email));
     let new_password = ensure_biz!(Password::try_from_async(params.new_password).await);
     service::reset_password(email, new_password, params.email_code).await
+}
+
+#[derive(Deserialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct UserUpdateDto {
+    pub user_name: Option<String>,
+    pub password: Option<UpdatePassword>,
+    pub address: Option<Vec<String>>,
+    pub mobile_number: Option<MobileNumber>,
+}
+
+#[derive(Deserialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdatePassword {
+    old_password: String,
+    new_password: String,
+}
+
+#[derive(Deserialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct MobileNumber {
+    // 管理员可以不传这个参数
+    #[serde(default)]
+    pub sms_code: String,
+    pub tel: String,
+}
+
+pub async fn update_profile(
+    user_id: UserId,
+    update_info: UserUpdateDto,
+) -> BizResult<(), UpdateProfileErr> {
+    let phone = if let Some(phone) = update_info.mobile_number {
+        // todo: verify sms code
+        Some(ensure_biz!(Phone::try_from(phone.tel)))
+    } else {
+        None
+    };
+    let user_name = if let Some(name) = update_info.user_name {
+        Some(ensure_biz!(UserName::try_from(name)))
+    } else {
+        None
+    };
+
+    let password = if let Some(password) = update_info.password {
+        let p = service::UpdatePassword {
+            old_password: password.old_password,
+            new_password: ensure_biz!(Password::try_from_async(password.new_password).await),
+        };
+        Some(p)
+    } else {
+        None
+    };
+
+    let update_info = service::UserUpdate {
+        user_name,
+        password,
+        address: update_info.address.map(|a| a.join(",")),
+        mobile_number: phone,
+    };
+
+    pg_tx!(service::update_profile, user_id, update_info)
 }

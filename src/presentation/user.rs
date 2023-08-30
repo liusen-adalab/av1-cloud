@@ -6,10 +6,10 @@ use actix_web::{
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    application::user::{self, LoginDto, ResetPasswordDto, UserDto},
+    application::user::{self, LoginDto, ResetPasswordDto, UserDto, UserUpdateDto},
     code,
     domain::user::{
-        service::{LoginErr, RegisterErr, ResetPasswordErr},
+        service::{LoginErr, RegisterErr, ResetPasswordErr, UpdateProfileErr},
         service_email::{CheckEmailCodeErr, SendEmailCodeErr},
     },
     http::{ApiError, ApiResponse, JsonResponse},
@@ -35,6 +35,10 @@ code! {
 
     pub EmailFormat = 40 {
         invalid,
+    }
+
+    pub PhoneFormatErr = 50 {
+        invalid
     }
 
     ---
@@ -63,6 +67,12 @@ code! {
     ResetPassword{
         email_code_mismatch,
         not_found
+    }
+    UpdateProfile {
+        not_found,
+        sms_code_mismatch,
+        password_not_match,
+        phone_already_binded
     }
 }
 
@@ -149,6 +159,19 @@ impl From<ResetPasswordErr> for ApiError {
         }
     }
 }
+impl From<UpdateProfileErr> for ApiError {
+    fn from(value: UpdateProfileErr) -> Self {
+        match value {
+            UpdateProfileErr::Name(a) => user_name_err!(a),
+            UpdateProfileErr::Password(a) => password_err!(a),
+            UpdateProfileErr::Phone(_) => PHONE_FORMAT_ERR.invalid.into(),
+            UpdateProfileErr::NotFound => UPDATE_PROFILE.not_found.into(),
+            UpdateProfileErr::SmsCodeMismatch => UPDATE_PROFILE.sms_code_mismatch.into(),
+            UpdateProfileErr::PasswordWrong(_) => UPDATE_PROFILE.password_not_match.into(),
+            UpdateProfileErr::PhoneAlreadyBinded => UPDATE_PROFILE.phone_already_binded.into(),
+        }
+    }
+}
 
 pub fn config(cfg: &mut web::ServiceConfig) {
     cfg.service(
@@ -161,6 +184,7 @@ pub fn config(cfg: &mut web::ServiceConfig) {
             .service(web::resource("/ping").route(web::get().to(user_ping)))
             .service(web::resource("/logout").route(web::post().to(logout)))
             .service(web::resource("/reset_password").route(web::post().to(reset_password)))
+            .service(web::resource("/modify_info").route(web::post().to(update_profile)))
             .service(web::resource("/send_email_code").route(web::get().to(send_email_code))),
     );
 }
@@ -268,5 +292,11 @@ pub async fn send_email_code(params: Query<SendEmailCodeParams>) -> JsonResponse
 
 pub async fn reset_password(params: Json<ResetPasswordDto>) -> JsonResponse<()> {
     user::reset_password(params.into_inner()).await??;
+    ApiResponse::Ok(())
+}
+
+pub async fn update_profile(id: Identity, params: Json<UserUpdateDto>) -> JsonResponse<()> {
+    let user_id = id.id()?.parse()?;
+    user::update_profile(user_id, params.into_inner()).await??;
     ApiResponse::Ok(())
 }
