@@ -4,7 +4,7 @@ use anyhow::{Context, Result};
 use config::Config;
 use serde::{Deserialize, Serialize};
 
-use crate::infrastructure::email::EmailCode;
+use crate::infrastructure::email::EmailCodeCfg;
 
 #[derive(Deserialize, Debug)]
 pub struct Settings {
@@ -19,7 +19,7 @@ pub struct Settings {
 
     pub postgres: utils::db_pools::postgres::PgPoolConfig,
 
-    pub email_code: EmailCode,
+    pub email_code: EmailCodeCfg,
 }
 
 #[derive(Deserialize, Debug)]
@@ -47,13 +47,15 @@ static SETTINGS: OnceLock<Settings> = OnceLock::new();
 pub fn load_settings(cfg_path: Option<&str>) -> Result<&'static Settings> {
     println!("loading settings. path = {:?}", cfg_path);
     let path = cfg_path.unwrap_or_default();
-    let settings = Config::builder()
+    let settings: Settings = Config::builder()
         .add_source(config::File::with_name("configs/default.toml").required(false))
         .add_source(config::File::with_name(path).required(cfg_path.is_some()))
         .add_source(config::Environment::with_prefix("AV1"))
         .build()
-        .context("cannot load config")?;
-    let settings: Settings = settings.try_deserialize().context("wrong config format")?;
+        .context("cannot load config")?
+        .try_deserialize()
+        .context("wrong config format")?;
+
     Ok(SETTINGS.get_or_init(|| settings))
 }
 

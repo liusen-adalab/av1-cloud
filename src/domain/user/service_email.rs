@@ -1,6 +1,8 @@
+use rand::Rng;
+
 use crate::{
-    biz_ok, domain::user::Email, ensure_biz, ensure_exist, http::BizResult, infrastructure,
-    redis_conn_switch::redis_conn,
+    biz_ok, domain::user::Email, ensure_exist, http::BizResult,
+    infrastructure::email::EmailCodeSender,
 };
 
 use super::EmailFormatErr;
@@ -12,15 +14,15 @@ pub enum SendEmailCodeErr {
 }
 
 pub async fn send_email_code(email: Email, fake: bool) -> BizResult<(), SendEmailCodeErr> {
-    let key = format!("email_code_record:{}", &**email);
-    let conn = &mut redis_conn().await?;
-    let set_ok: bool = redis::cmd("set")
-        .arg(&[&key, "1", "EX", "60", "NX"])
-        .query_async(conn)
-        .await?;
-    ensure_biz!(set_ok, SendEmailCodeErr::TooFrequent);
-
-    infrastructure::email::send_code(&email, fake).await?;
+    let code: u32 = rand::thread_rng().gen_range(100_000..999_999);
+    let sender = ensure_exist!(
+        EmailCodeSender::try_build(&**email, code).await?,
+        SendEmailCodeErr::TooFrequent
+    );
+    if !fake {
+        sender.send().await?;
+    }
+    sender.save().await?;
 
     biz_ok!(())
 }
@@ -32,7 +34,7 @@ pub enum CheckEmailCodeErr {
 }
 
 pub async fn check_email_code(email: Email, code: &str) -> BizResult<bool, CheckEmailCodeErr> {
-    let sent_code = infrastructure::email::retrive_sent_code(&**email).await?;
-    let sent_code = ensure_exist!(sent_code, CheckEmailCodeErr::NoEmailCode);
+    let sent_code = EmailCodeSender::get_sent_code(&email).await?;
+    let sent_code = ensure_exist!(sent_code, CheckEmailCodeErr::NoEmailCode).to_string();
     biz_ok!(sent_code == code)
 }

@@ -24,9 +24,10 @@ pub enum RegisterErr {
 
 pub async fn register(user: User, email_code: String) -> BizResult<UserId, RegisterErr> {
     let code = ensure_exist!(
-        email::retrive_sent_code(&user.email).await?,
+        email::EmailCodeSender::get_sent_code(&user.email).await?,
         RegisterErr::NoEmailCode
     );
+    let code = code.to_string();
     ensure_biz!(code == email_code, RegisterErr::EmailCodeMisMatch);
 
     pg_tx!(register_tx, user)

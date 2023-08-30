@@ -66,8 +66,17 @@ pub async fn http_ping() -> &'static str {
 
 pub async fn init_global() -> Result<()> {
     let args: Vec<_> = std::env::args().collect();
+
     let cfg_path = if args.len() > 1 {
-        Some(&*args[1])
+        // 在测试中，会默认传入多个参数
+        #[cfg(test)]
+        {
+            None
+        }
+        #[cfg(not(test))]
+        {
+            Some(&*args[1])
+        }
     } else {
         None
     };

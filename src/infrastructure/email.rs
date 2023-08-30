@@ -5,15 +5,14 @@ use lettre::{
     message::header::ContentType, transport::smtp::authentication::Credentials, AsyncSmtpTransport,
     AsyncTransport, Message, Tokio1Executor,
 };
-use rand::Rng;
 use redis::AsyncCommands;
 use serde::{Deserialize, Serialize};
-use tracing::debug;
+use tracing::{debug, warn};
 
 use crate::{redis_conn_switch::redis_conn, settings::get_settings};
 
 #[derive(Default, Debug, Serialize, Deserialize)]
-pub struct EmailCode {
+pub struct EmailCodeCfg {
     pub from_full: String,
     pub from_addr: String,
     pub password: String,
@@ -41,59 +40,80 @@ pub fn get_email_code_template() -> &'static String {
     EAMIL_CODE_TEMPLATE.get().unwrap()
 }
 
-/// 获取已发送给 `email` 的验证码
-///
-/// # notes
-///
-/// 为了防止暴力破解，验证码被获取 5 次后会被删除
-pub async fn retrive_sent_code(email: &str) -> Result<Option<String>> {
-    let mut conn = redis_conn().await?;
-    let key = &redis_key_email_code(email);
-    let code: Option<u32> = conn.decr(key, 1).await?;
-    let Some(code) = code else {
-        return Ok(None);
-    };
-    let trial_num = code % 10;
-    let code = match trial_num {
-        0 => {
-            let _: bool = conn.del(key).await?;
-            Some(code / 10)
-        }
-        1..=4 => Some(code / 10),
-        _ => {
-            let _: bool = conn.del(key).await?;
-            None
-        }
-    };
-    Ok(code.map(|c| c.to_string()))
+pub struct EmailCodeSender<'a> {
+    email: &'a str,
+    code: u32,
 }
 
-pub fn redis_key_email_code(email: &str) -> String {
-    format!("email_code:{}", email)
-}
+impl<'a> EmailCodeSender<'a> {
+    pub async fn try_build(email: &'a str, code: u32) -> Result<Option<EmailCodeSender<'a>>> {
+        let key = format!("email:code_record:{}", &email);
+        let conn = &mut redis_conn().await?;
 
-///  发送验证码，后续调用 [`query_email_code`] 获取已发送的验证码
-///
-/// # 参数
-///
-/// * `to` - 接收验证码的邮箱地址
-pub async fn send_code(to: &str, fake: bool) -> Result<String> {
-    let config = &get_settings().email_code;
+        // 一分钟内只能发送一次验证码
+        let set_ok: bool = redis::cmd("set")
+            .arg(&[&key, "1", "EX", "60", "NX"])
+            .query_async(conn)
+            .await?;
 
-    let template = get_email_code_template();
-    let email_code: u32 = rand::thread_rng().gen_range(100_000..999_999);
-    debug!(email_code, "email code sending");
-    let body = template.replace("{{email_code}}", email_code.to_string().as_str());
-
-    if !fake {
-        send_email(&config.from_full, to, &config.subject, body).await?;
+        if set_ok {
+            Ok(Some(Self { email, code }))
+        } else {
+            Ok(None)
+        }
     }
-    let mut conn = redis_conn().await?;
-    let key = redis_key_email_code(to);
-    // 5 分钟有效期，在验证码加一个计数器
-    conn.set_ex(key, email_code * 10 + 5, 300).await?;
 
-    Ok(email_code.to_string())
+    pub async fn send(&self) -> Result<()> {
+        let config = &get_settings().email_code;
+        let template = get_email_code_template();
+        let body = template.replace("{{email_code}}", self.code.to_string().as_str());
+        send_email(&config.from_full, &self.email, &config.subject, body).await?;
+        Ok(())
+    }
+
+    pub async fn save(&self) -> Result<()> {
+        let conn = &mut redis_conn().await?;
+
+        // 5 分钟有效期，在验证码加一个计数器
+        conn.set_ex(Self::key(&self.email), self.code * 10 + 5, 300)
+            .await?;
+        Ok(())
+    }
+
+    /// 获取已发送给 `email` 的验证码
+    ///
+    /// # Notes
+    ///
+    /// 为了防止暴力破解，验证码被获取 5 次后会被删除
+    pub async fn get_sent_code(email: &str) -> Result<Option<u32>> {
+        let mut conn = redis_conn().await?;
+        let key = &Self::key(email);
+        let code: i64 = conn.decr(key, 1).await?;
+        if code < 0 {
+            return Ok(None);
+        }
+        let code = code as u32;
+
+        let trial_num = code % 10;
+        let code = match trial_num {
+            0 => {
+                let _: bool = conn.del(key).await?;
+                Some(code / 10)
+            }
+            1..=4 => Some(code / 10),
+            _ => {
+                // 如果是其他，可能之前出现了异常情况
+                warn!(email, code, "Something wired about email-code is going on.");
+                let _: bool = conn.del(key).await?;
+                None
+            }
+        };
+        Ok(code)
+    }
+
+    fn key(email: &str) -> String {
+        format!("email:code:{}", email)
+    }
 }
 
 pub async fn send_email(
@@ -127,18 +147,26 @@ pub async fn send_email(
 #[cfg(test)]
 mod test {
 
+    use anyhow::bail;
+
+    use crate::init_global;
+
     use super::*;
 
     #[tokio::test]
     async fn test_send_email() -> anyhow::Result<()> {
-        // init_global().await?;
+        init_global().await?;
 
-        let to = "liu_zsen@163.com";
-        let sent_code = send_code(&to, true).await?;
-        dbg!(&sent_code);
-        let code = retrive_sent_code(&to).await?;
-        assert_eq!(sent_code, code.unwrap());
+        let to = "lzs@orientphoenix.com";
+        let code = 123456;
+        let Some(sender) = EmailCodeSender::try_build(to, code).await? else {
+            bail!("cannot build sender");
+        };
+        sender.send().await?;
+        sender.save().await?;
+        let sent_code = EmailCodeSender::get_sent_code(to).await?;
 
+        assert_eq!(sent_code.unwrap(), code);
         Ok(())
     }
 }
