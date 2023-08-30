@@ -44,6 +44,21 @@ do
 done
 '''
 
+[tasks.reset]
+script = '''
+# cache
+for i in {70..75}
+do 
+    redis-cli -c -h 10.0.10.${i} flushall
+done
+
+# session 
+redis-cli -n 1 -h 10.0.10.59 flushdb
+
+# db
+PGPASSWORD=postgres psql -h 10.0.10.3 -p 30020 -U postgres -d av1_cloud -c "TRUNCATE TABLE users;"
+'''
+
 [tasks.d]
 alias = "deploy"
 

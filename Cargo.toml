@@ -24,6 +24,7 @@ tokio = { version = "1.32.0", features = ["full"] }
 chrono = { version = "0.4.26", default-features = false, features = [
     "clock",
     "std",
+    "serde",
 ] }
 actix-web = "4.3.1"
 anyhow.workspace = true
