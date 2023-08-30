@@ -1,0 +1,51 @@
+[env]
+RUST_LOG = "off"
+
+[config]
+default_to_workspace = false
+# reduce_output = true
+time_summary = false
+
+[tasks.deploy]
+script = '''
+set -e
+set +x
+
+cargo build --release
+
+for i in {13..15}
+do
+    server=web${i}
+    bin_dir=/etc/av1-cloud
+
+    # init environment 
+    ssh ${server} "mkdir -p ${bin_dir}"
+    ssh ${server} "systemctl stop av1-cloud || true"
+
+    # sync bin
+    scp target/release/av1-cloud ${server}:/usr/bin
+    scp -r configs/ ${server}:$bin_dir
+    
+    # sync service
+    scp ./scripts/av1-cloud.service  ${server}:/etc/systemd/system/av1-cloud.service
+    ssh ${server} "systemctl daemon-reload"
+    ssh ${server} "systemctl enable av1-cloud"
+    ssh ${server} "systemctl restart av1-cloud"
+done
+'''
+
+[tasks.nginx]
+script = '''
+for i in {13..14}
+do
+    server=web${i}
+    scp scripts/nginx/nginx.conf ${server}:/etc/nginx/
+    ssh ${server} "nginx -s reload"
+done
+'''
+
+[tasks.d]
+alias = "deploy"
+
+[tasks.n]
+alias = "nginx"

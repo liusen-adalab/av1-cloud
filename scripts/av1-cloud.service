@@ -1,0 +1,12 @@
+[Unit]
+Description=AV1 cloud backend service
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/av1-cloud /etc/av1-cloud/configs/release.toml
+Restart=on-failure
+WorkingDirectory=/etc/av1-cloud/
+
+[Install]
+WantedBy=multi-user.target

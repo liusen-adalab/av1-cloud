@@ -1,12 +1,13 @@
 [http_server]
 bind = "0.0.0.0"
-port = 5991
+port = 30010
 
 [http_server.session]
-url = "redis://127.0.0.1:6379"
+url = "redis://10.0.10.59:6379/1"
 secure = false
-http_only = false
-max_age_secs = 3600_00
+http_only = true
+# session 有效期一天
+max_age_secs = 86400
 
 [log]
 level = "debug"
