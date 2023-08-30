@@ -64,6 +64,7 @@ impl<'a> EmailCodeSender<'a> {
     }
 
     pub async fn send(&self) -> Result<()> {
+        debug!(code = self.code, "sending email code");
         let config = &get_settings().email_code;
         let template = get_email_code_template();
         let body = template.replace("{{email_code}}", self.code.to_string().as_str());
@@ -72,6 +73,7 @@ impl<'a> EmailCodeSender<'a> {
     }
 
     pub async fn save(&self) -> Result<()> {
+        debug!(code = self.code, "saving email code");
         let conn = &mut redis_conn().await?;
 
         // 5 分钟有效期，在验证码加一个计数器

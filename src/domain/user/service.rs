@@ -56,7 +56,7 @@ pub async fn login_tx(
     let user = repo_user::find(&email, conn).await?;
     let mut user = ensure_exist!(user, LoginErr::EmailOrPasswordWrong);
     ensure_biz!(user.login(&password).await?);
-    repo_user::save_changed(&user, conn).await?;
+    repo_user::update(&user, conn).await?;
 
     biz_ok!(user.id)
 }
@@ -67,7 +67,7 @@ pub async fn logout_tx(user_id: UserId, conn: &mut PgConn) -> anyhow::Result<()>
     };
 
     user.logout();
-    repo_user::save_changed(&user, conn).await?;
+    repo_user::update(&user, conn).await?;
 
     Ok(())
 }

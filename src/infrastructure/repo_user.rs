@@ -16,7 +16,7 @@ use diesel::{
 use diesel_async::RunQueryDsl;
 use utils::db_pools::postgres::PgConn;
 
-#[derive(Queryable, Selectable, Insertable, AsChangeset, Identifiable)]
+#[derive(Queryable, Selectable, Insertable, AsChangeset, Identifiable, Debug)]
 #[diesel(table_name = users)]
 pub struct UserPo<'a> {
     pub id: i64,
@@ -38,7 +38,7 @@ impl EffectedRow {
     }
 }
 
-pub async fn save(user: &User, conn: &mut PgConn) -> Result<EffectedRow> {
+pub(crate) async fn save(user: &User, conn: &mut PgConn) -> Result<EffectedRow> {
     let user = UserPo::from_do(user);
 
     let effected = diesel::insert_into(users::table)
@@ -50,9 +50,13 @@ pub async fn save(user: &User, conn: &mut PgConn) -> Result<EffectedRow> {
     Ok(EffectedRow(effected))
 }
 
-pub(crate) async fn save_changed(user: &User, conn: &mut PgConn) -> Result<()> {
+pub(crate) async fn update(user: &User, conn: &mut PgConn) -> Result<()> {
     let user = UserPo::from_do(user);
-    diesel::update(users::table).set(user).execute(conn).await?;
+    diesel::update(users::table)
+        .filter(users::id.eq(user.id))
+        .set(user)
+        .execute(conn)
+        .await?;
     Ok(())
 }
 
