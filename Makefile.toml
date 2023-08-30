@@ -13,7 +13,7 @@ set +x
 
 cargo build --release
 
-for i in {13..15}
+for i in {15..16}
 do
     server=web${i}
     work_dir=/etc/av1-cloud
