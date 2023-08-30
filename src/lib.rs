@@ -1,9 +1,12 @@
 use actix_identity::IdentityMiddleware;
 use actix_session::{config::PersistentSession, storage::RedisSessionStore, SessionMiddleware};
-use actix_web::{cookie::Key, dev::Server, web, App, HttpServer};
+use actix_web::{
+    cookie::{time::Duration, Key},
+    dev::Server,
+    web, App, HttpServer,
+};
 use anyhow::{Context, Result};
 use settings::get_settings;
-use time::Duration;
 use tracing::info;
 
 use crate::{presentation::user, settings::load_settings};
