@@ -53,6 +53,7 @@ redis.workspace = true
 actix-session = { version = "0.7.2", features = ["redis-rs-session"] }
 actix-identity = "0.5.2"
 email_address = { version = "0.2.4", default-features = false }
+actix-cors = "0.6.4"
 
 [dev-dependencies]
 # 必须使用 rustls，因为 arch 系统的 openssl 产生了不兼容的更改

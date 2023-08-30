@@ -1,3 +1,4 @@
+use actix_cors::Cors;
 use actix_identity::IdentityMiddleware;
 use actix_session::{config::PersistentSession, storage::RedisSessionStore, SessionMiddleware};
 use actix_web::{
@@ -36,11 +37,13 @@ pub async fn build_http_server() -> Result<Server> {
     let store = RedisSessionStore::new(&settings.session.url).await?;
     let server: Server = HttpServer::new(move || {
         let sss = build_session_mw(store.clone());
+        let cors = Cors::permissive();
         App::new()
             .configure(user::config)
             .route("/ping", web::get().to(http_ping))
             .wrap(IdentityMiddleware::default())
             .wrap(sss)
+            .wrap(cors)
     })
     .bind((&*settings.bind, settings.port))?
     .run();
