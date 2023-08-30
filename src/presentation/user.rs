@@ -106,7 +106,6 @@ impl From<RegisterErr> for ApiError {
             RegisterErr::Password(p) => password_err!(p),
             RegisterErr::Email(e) => email_err!(e),
             RegisterErr::AlreadyRegister => REGISTER.alredy_register.into(),
-            RegisterErr::NoEmailCode => REGISTER.no_email_code.into(),
             RegisterErr::EmailCodeMisMatch => REGISTER.email_code_mismatch.into(),
         }
     }

@@ -22,17 +22,14 @@ pub enum RegisterErr {
     Password(PasswordFormatErr),
     Email(EmailFormatErr),
     AlreadyRegister,
-    NoEmailCode,
     EmailCodeMisMatch,
 }
 
 pub async fn register(user: User, email_code: String) -> BizResult<UserId, RegisterErr> {
-    let code = ensure_exist!(
-        email::EmailCodeSender::get_sent_code(&user.email).await?,
-        RegisterErr::NoEmailCode
+    ensure_biz!(
+        email::EmailCodeSender::verify_email_code(&user.email, &email_code).await?,
+        RegisterErr::EmailCodeMisMatch
     );
-    let code = code.to_string();
-    ensure_biz!(code == email_code, RegisterErr::EmailCodeMisMatch);
 
     pg_tx!(register_tx, user)
 }

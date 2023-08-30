@@ -82,12 +82,21 @@ impl<'a> EmailCodeSender<'a> {
         Ok(())
     }
 
+    /// 校验邮箱验证码
+    /// 如果正确，对应的验证码将被删除
+    /// 如果错误，消耗验证的次数
     pub async fn verify_email_code(email: &str, code: &str) -> Result<bool> {
         let Some(sent_code) = Self::get_sent_code(email).await? else {
             return Ok(false);
         };
 
-        Ok(sent_code.to_string() == code)
+        let valid = sent_code.to_string() == code;
+        if valid {
+            let conn = &mut redis_conn().await?;
+            let _: () = conn.del(Self::key(email)).await?;
+        }
+
+        Ok(valid)
     }
 
     /// 获取已发送给 `email` 的验证码
