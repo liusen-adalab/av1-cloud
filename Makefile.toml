@@ -16,15 +16,15 @@ cargo build --release
 for i in {13..15}
 do
     server=web${i}
-    bin_dir=/etc/av1-cloud
+    work_dir=/etc/av1-cloud
 
     # init environment 
-    ssh ${server} "mkdir -p ${bin_dir}"
+    ssh ${server} "mkdir -p ${work_dir}"
     ssh ${server} "systemctl stop av1-cloud || true"
 
     # sync bin
     scp target/release/av1-cloud ${server}:/usr/bin
-    scp -r configs/ ${server}:$bin_dir
+    scp -r configs/ ${server}:${work_dir}
     
     # sync service
     scp ./scripts/av1-cloud.service  ${server}:/etc/systemd/system/av1-cloud.service
