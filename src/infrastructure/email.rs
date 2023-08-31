@@ -68,7 +68,8 @@ impl<'a> EmailCodeSender<'a> {
         let config = &get_settings().email_code;
         let template = get_email_code_template();
         let body = template.replace("{{email_code}}", self.code.to_string().as_str());
-        send_email(&config.from_full, &self.email, &config.subject, body).await?;
+        let body = body.replace("{{email_target}}", self.email);
+        send_email(&config.from_full, self.email, &config.subject, body).await?;
         Ok(())
     }
 

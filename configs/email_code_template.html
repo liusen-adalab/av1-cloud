@@ -4,14 +4,88 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>验证码</title>
+    <title>Document</title>
+    <style>
+        body {
+            background-color: #F4F4F4;
+        }
+
+        .card {
+            width: 720px;
+            margin: 100px auto;
+            background-color: #fff;
+            padding: 32px;
+            margin-bottom: 16px;
+            box-shadow: 0px 6px 16px 0px rgba(0, 0, 0, 0.08);
+        }
+
+        h1 {
+            margin-top: 24px;
+            border-top: 2px solid #E7EFFE;
+            padding: 32px 0 16px;
+            font-size: 20px;
+            font-family: PingFang SC-Medium, PingFang SC;
+            font-weight: 500;
+            color: #000000;
+            line-height: 23px;
+        }
+
+        p {
+            font-size: 14px;
+            font-family: PingFang SC-Regular, PingFang SC;
+            font-weight: 400;
+            color: #525252;
+            line-height: 16px;
+            margin-bottom: 8px;
+        }
+
+        .code {
+            margin: 32px 0;
+            line-height: 48px;
+            background-color: #E7EFFE;
+            text-align: center;
+            font-size: 24px;
+            font-family: PingFang SC-Medium, PingFang SC;
+            font-weight: 500;
+            color: #0F62FE;
+        }
+
+        .periodOfValidity {
+            color: #000000;
+            font-weight: 600;
+        }
+
+        .right {
+            margin: 48px 0 8px;
+        }
+
+        .conpany {
+            color: #000000;
+            font-size: 16px;
+            font-weight: 600;
+        }
+
+        .mask {
+            text-align: center;
+            color: #6F6F6F;
+        }
+    </style>
 </head>
 
 <body>
-    <div style="display: flex; flex-direction: column; align-items: center;">
-        <h2 style="font-family: Arial, Helvetica, sans-serif;">你好，这是你的验证码，请在 5 分钟内使用</h2>
-        <h4 style="font-family: Arial, Helvetica, sans-serif;">{{email_code}}</h4>
+    <div class="card">
+        <div class="logo">
+            <img src="https://s1.ax1x.com/2023/08/31/pPwvHFx.png" />
+        </div>
+        <h1>电子邮箱验证码</h1>
+        <p>尊敬的 AV1 用户，您好！</p>
+        <p>您的 AV1 账号：{{email_target}} 正在请求电子邮箱验证，验证码为：</p>
+        <div class="code">{{email_code}}</div>
+        <p>请在<span class="periodOfValidity"> 5 </span>分钟内完成验证。AV1 不会向您索取验证码信息，请勿泄露。</p>
+        <p class="right">此致</p>
+        <p class="conpany">AVI 团队</p>
     </div>
+    <p class="mask">此邮件由系统发送，请勿回复</p>
 </body>
 
 </html>

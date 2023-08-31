@@ -22,9 +22,9 @@ do
     ssh ${server} "mkdir -p ${work_dir}"
     ssh ${server} "systemctl stop av1-cloud || true"
 
-    # sync bin
+    # sync bin && configs
     scp target/release/av1-cloud ${server}:/usr/bin
-    scp -r configs/ ${server}:${work_dir}
+    scp -r configs/* ${server}:${work_dir}/configs
     
     # sync service
     scp ./scripts/av1-cloud.service  ${server}:/etc/systemd/system/av1-cloud.service
