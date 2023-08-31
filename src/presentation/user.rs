@@ -13,6 +13,7 @@ use crate::{
         service_email::{CheckEmailCodeErr, SendEmailCodeErr},
     },
     http::{ApiError, ApiResponse, JsonResponse},
+    log_if_err,
 };
 
 code! {
@@ -266,7 +267,8 @@ pub(crate) async fn login(params: Json<LoginDto>, req: HttpRequest) -> JsonRespo
 
 pub(crate) async fn logout(id: Identity) -> JsonResponse<()> {
     let user_id = id.id()?.parse()?;
-    user::logout(user_id).await?;
+    // 不返回错误，只记录日志
+    log_if_err!(user::logout(user_id).await);
     id.logout();
     ApiResponse::Ok(())
 }

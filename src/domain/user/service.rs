@@ -1,4 +1,3 @@
-use anyhow::bail;
 use utils::db_pools::postgres::PgConn;
 
 use crate::{
@@ -6,10 +5,7 @@ use crate::{
     domain::user::Email,
     ensure_biz, ensure_exist,
     http::BizResult,
-    infrastructure::{
-        email::{self, EmailCodeSender},
-        repo_user,
-    },
+    infrastructure::{email::EmailCodeSender, repo_user},
     pg_tx,
 };
 use derive_more::From;
@@ -28,16 +24,13 @@ pub enum RegisterErr {
     EmailCodeMisMatch,
 }
 
-pub async fn register(user: User, email_code: String) -> BizResult<UserId, RegisterErr> {
-    ensure_biz!(
-        email::EmailCodeSender::verify_email_code(&user.email, &email_code).await?,
-        RegisterErr::EmailCodeMisMatch
-    );
-
+pub async fn register(user: User) -> BizResult<UserId, RegisterErr> {
     pg_tx!(register_tx, user)
 }
 
 pub async fn register_tx(user: User, conn: &mut PgConn) -> BizResult<UserId, RegisterErr> {
+    ensure_biz!(not repo_user::exist(&user.email, conn).await?, RegisterErr::AlreadyRegister);
+    // 上一步检查有概率漏检，所以应该以最后一步写入结果为准
     ensure_biz!(
         repo_user::save(&user, conn).await?.actually_effected(),
         RegisterErr::AlreadyRegister
@@ -63,17 +56,6 @@ pub async fn login_tx(
     repo_user::update(&user, conn).await?;
 
     biz_ok!(user.id)
-}
-
-pub async fn logout_tx(user_id: UserId, conn: &mut PgConn) -> anyhow::Result<()> {
-    let Some(mut user) = repo_user::find(user_id, conn).await? else {
-        bail!("user not found. id = {}", user_id);
-    };
-
-    user.logout();
-    repo_user::update(&user, conn).await?;
-
-    Ok(())
 }
 
 #[derive(From)]
@@ -143,7 +125,7 @@ pub async fn update_profile(
     if let Some(phone) = &update_info.mobile_number {
         // 目前单个手机号只能绑定一个账号
         ensure_biz!(
-            !repo_user::exist(phone, conn).await?,
+            not repo_user::exist(phone, conn).await?,
             UpdateProfileErr::PhoneAlreadyBinded
         );
     }

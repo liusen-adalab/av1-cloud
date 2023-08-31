@@ -1,5 +1,5 @@
 use serde::Deserialize;
-use utils::db_pools::postgres::pg_conn;
+use utils::db_pools::postgres::{pg_conn, PgConn};
 
 use crate::{
     domain::user::{
@@ -9,10 +9,10 @@ use crate::{
     },
     ensure_biz,
     http::BizResult,
-    infrastructure::repo_user,
+    infrastructure::{email::EmailCodeSender, repo_user},
     pg_tx, tx_func,
 };
-use anyhow::Result;
+use anyhow::{bail, Result};
 
 pub async fn is_email_registerd(email: String) -> Result<bool> {
     let Ok(email) = Email::try_from(email) else {
@@ -39,8 +39,13 @@ pub struct UserDto {
 pub async fn register(user_dto: UserDto) -> BizResult<UserId, RegisterErr> {
     let email = ensure_biz!(Email::try_from(user_dto.email));
     let password = ensure_biz!(Password::try_from_async(user_dto.password).await);
+    ensure_biz!(
+        EmailCodeSender::verify_email_code(&email, &user_dto.email_code).await?,
+        RegisterErr::EmailCodeMisMatch
+    );
+
     let user = User::create(email, password);
-    service::register(user, user_dto.email_code).await
+    service::register(user).await
 }
 
 #[derive(Deserialize)]
@@ -56,7 +61,19 @@ pub async fn login(login: LoginDto) -> BizResult<UserId, LoginErr> {
 }
 
 pub async fn logout(id: UserId) -> anyhow::Result<()> {
-    tx_func!(service::logout_tx, id)
+    tx_func!(logout_tx, id)
+}
+
+pub async fn logout_tx(user_id: UserId, conn: &mut PgConn) -> anyhow::Result<()> {
+    let Some(mut user) = repo_user::find(user_id, conn).await? else {
+        bail!("user not found. id = {}", user_id);
+    };
+
+    user.logout();
+
+    repo_user::update(&user, conn).await?;
+
+    Ok(())
 }
 
 pub async fn send_email_code(email: String, fake: bool) -> BizResult<(), SendEmailCodeErr> {

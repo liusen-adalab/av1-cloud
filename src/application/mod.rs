@@ -11,6 +11,12 @@ macro_rules! ensure_ok {
 
 #[macro_export]
 macro_rules! ensure_biz {
+    (not $predict:expr, $err:expr) => {
+        if $predict {
+            return Ok(Err($err));
+        }
+    };
+
     ($predict:expr, $err:expr) => {
         if !$predict {
             return Ok(Err($err));
