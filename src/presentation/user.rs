@@ -4,10 +4,10 @@ use actix_web::{
     HttpMessage, HttpRequest,
 };
 use serde::{Deserialize, Serialize};
+use utils::code;
 
 use crate::{
     application::user::{self, LoginDto, ResetPasswordDto, SendSmsCodeErr, UserDto, UserUpdateDto},
-    code,
     domain::user::{
         service::{LoginErr, RegisterErr, ResetPasswordErr, UpdateProfileErr},
         service_email::{CheckEmailCodeErr, SendEmailCodeErr},
@@ -22,61 +22,65 @@ code! {
     err_trait = crate::http::HttpBizError; // http 状态码 trait 的路径
 
     pub PasswordFormat = 20 {
-        too_long,
-        too_short,
-        not_allowed_char,
-        too_simple,
+        too_long = "密码太长了",
+        too_short = "密码太短了",
+        not_allowed_char = "密码中包含不允许使用的字符",
+        too_simple = "密码太简单了",
     }
 
     pub UserNameFormat = 30 {
-        too_long,
-        too_short,
-        not_allowed_char
+        too_long = "用户名太长了",
+        too_short = "用户名太短了",
+        not_allowed_char = "用户名中包含不允许使用的字符",
     }
 
     pub EmailFormat = 40 {
-        invalid,
+        invalid = "请输入格式正确的邮箱",
     }
 
     pub PhoneFormatErr = 50 {
-        invalid
+        invalid = "请输入格式正确的手机号",
+    }
+
+    pub SanityCheck = 60 {
+        email_code_not_match = "邮箱验证码错误" ,
+        sms_code_not_match= "手机验证码错误",
+        password_not_match= "密码错误",
     }
 
     ---
 
     Register {
         use PasswordFormat,
-        alredy_register,
-        no_email_code,
-        email_code_mismatch
+        alredy_register= "已注册",
+        no_email_code= "请先获取邮箱验证码",
     }
 
     Login {
         use PasswordFormat,
-        account_mismatch,
+        account_not_match = "账号或密码错误",
     }
 
     SendEmailCode {
         use EmailFormat,
-        too_frequent
+        too_frequent = "获取邮箱验证"
     }
 
     CheckEmailCode {
-        no_email_code
+        no_email_code = "请先获取邮箱验证码"
     }
 
     ResetPassword{
-        email_code_mismatch,
-        not_found
+        not_found = "账号不存在"
     }
+
     UpdateProfile {
-        not_found,
-        sms_code_mismatch,
-        password_not_match,
-        phone_already_binded
+        not_found = "账号不存在",
+        phone_already_binded ="该手机号已被绑定"
     }
+
     SendSmsCode {
-        too_frequent
+        too_frequent ="获取手机验证码太频繁了，请稍后再试"
     }
 }
 
@@ -119,6 +123,22 @@ macro_rules! phone_err {
     };
 }
 
+macro_rules! sanity_check {
+    ($s:expr) => {{
+        match $s {
+            crate::domain::user::service::SanityCheck::EmailCodeNotMatch => {
+                SANITY_CHECK.email_code_not_match.into()
+            }
+            crate::domain::user::service::SanityCheck::SmsCodeNotMatch => {
+                SANITY_CHECK.sms_code_not_match.into()
+            }
+            crate::domain::user::service::SanityCheck::PasswordNotMatch => {
+                SANITY_CHECK.password_not_match.into()
+            }
+        }
+    }};
+}
+
 impl From<RegisterErr> for ApiError {
     fn from(value: RegisterErr) -> Self {
         match value {
@@ -126,7 +146,7 @@ impl From<RegisterErr> for ApiError {
             RegisterErr::Password(p) => password_err!(p),
             RegisterErr::Email(e) => email_err!(e),
             RegisterErr::AlreadyRegister => REGISTER.alredy_register.into(),
-            RegisterErr::EmailCodeMisMatch => REGISTER.email_code_mismatch.into(),
+            RegisterErr::Sanity(s) => sanity_check!(s),
         }
     }
 }
@@ -145,7 +165,7 @@ impl From<LoginErr> for ApiError {
         match value {
             LoginErr::Password(a) => password_err!(a),
             LoginErr::Email(e) => email_err!(e),
-            LoginErr::EmailOrPasswordWrong => LOGIN.account_mismatch.into(),
+            LoginErr::EmailOrPasswordWrong => LOGIN.account_not_match.into(),
         }
     }
 }
@@ -164,7 +184,7 @@ impl From<ResetPasswordErr> for ApiError {
         match value {
             ResetPasswordErr::Password(a) => password_err!(a),
             ResetPasswordErr::Email(e) => email_err!(e),
-            ResetPasswordErr::CodeNotMatch => RESET_PASSWORD.email_code_mismatch.into(),
+            ResetPasswordErr::SanityCheck(s) => sanity_check!(s),
             ResetPasswordErr::NotFound => RESET_PASSWORD.not_found.into(),
         }
     }
@@ -177,8 +197,7 @@ impl From<UpdateProfileErr> for ApiError {
             UpdateProfileErr::Password(a) => password_err!(a),
             UpdateProfileErr::Phone(_) => PHONE_FORMAT_ERR.invalid.into(),
             UpdateProfileErr::NotFound => UPDATE_PROFILE.not_found.into(),
-            UpdateProfileErr::SmsCodeMismatch => UPDATE_PROFILE.sms_code_mismatch.into(),
-            UpdateProfileErr::PasswordWrong(_) => UPDATE_PROFILE.password_not_match.into(),
+            UpdateProfileErr::Sanity(s) => sanity_check!(s),
             UpdateProfileErr::PhoneAlreadyBinded => UPDATE_PROFILE.phone_already_binded.into(),
         }
     }
@@ -215,15 +234,17 @@ pub struct StatusCode {
     code: u32,
     msg: &'static str,
     endpoint: &'static str,
+    tip: &'static str,
 }
 
 pub async fn get_resp_status_doc() -> JsonResponse<Vec<StatusCode>> {
-    let doc = document()
+    let doc = err_list()
         .into_iter()
         .map(|d| StatusCode {
-            code: d.0,
-            endpoint: d.1,
-            msg: d.2,
+            code: d.err.code,
+            endpoint: d.endpoint,
+            msg: d.err.msg,
+            tip: d.err.tip,
         })
         .collect();
     ApiResponse::Ok(doc)

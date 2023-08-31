@@ -13,13 +13,13 @@ macro_rules! ensure_ok {
 macro_rules! ensure_biz {
     (not $predict:expr, $err:expr) => {
         if $predict {
-            return Ok(Err($err));
+            return Ok(Err($err.into()));
         }
     };
 
     ($predict:expr, $err:expr) => {
         if !$predict {
-            return Ok(Err($err));
+            return Ok(Err($err.into()));
         }
     };
 

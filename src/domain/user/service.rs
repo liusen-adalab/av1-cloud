@@ -11,8 +11,8 @@ use crate::{
 use derive_more::From;
 
 use super::{
-    EmailFormatErr, Password, PasswordFormatErr, PasswordNotMatch, Phone, PhoneFormatErr, User,
-    UserId, UserName, UserNameFormatErr,
+    EmailFormatErr, Password, PasswordFormatErr, Phone, PhoneFormatErr, User, UserId, UserName,
+    UserNameFormatErr,
 };
 
 #[derive(derive_more::From)]
@@ -21,7 +21,7 @@ pub enum RegisterErr {
     Password(PasswordFormatErr),
     Email(EmailFormatErr),
     AlreadyRegister,
-    EmailCodeMisMatch,
+    Sanity(SanityCheck),
 }
 
 pub async fn register(user: User) -> BizResult<UserId, RegisterErr> {
@@ -45,6 +45,12 @@ pub enum LoginErr {
     EmailOrPasswordWrong,
 }
 
+pub enum SanityCheck {
+    EmailCodeNotMatch,
+    SmsCodeNotMatch,
+    PasswordNotMatch,
+}
+
 pub async fn login_tx(
     email: Email,
     password: String,
@@ -62,7 +68,7 @@ pub async fn login_tx(
 pub enum ResetPasswordErr {
     Password(PasswordFormatErr),
     Email(EmailFormatErr),
-    CodeNotMatch,
+    SanityCheck(SanityCheck),
     NotFound,
 }
 
@@ -73,7 +79,7 @@ pub async fn reset_password(
 ) -> BizResult<(), ResetPasswordErr> {
     ensure_biz!(
         EmailCodeSender::verify_email_code(&email, &email_code).await?,
-        ResetPasswordErr::CodeNotMatch
+        SanityCheck::EmailCodeNotMatch
     );
     pg_tx!(reset_password_tx, email, new_password)
 }
@@ -112,8 +118,7 @@ pub enum UpdateProfileErr {
     Password(PasswordFormatErr),
     Phone(PhoneFormatErr),
     NotFound,
-    SmsCodeMismatch,
-    PasswordWrong(PasswordNotMatch),
+    Sanity(SanityCheck),
     PhoneAlreadyBinded,
 }
 

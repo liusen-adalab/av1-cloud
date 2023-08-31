@@ -8,7 +8,7 @@ use tracing::warn;
 
 use crate::{biz_ok, ensure_biz, ensure_ok, http::BizResult, infrastructure::repo_user::UserPo};
 
-use self::service::{LoginErr, UpdateProfileErr, UserUpdate};
+use self::service::{LoginErr, SanityCheck, UpdateProfileErr, UserUpdate};
 
 pub mod service;
 pub mod service_email;
@@ -86,12 +86,11 @@ impl User {
         self.password = new
     }
 
-    pub async fn set_password(
-        &mut self,
-        old: String,
-        new: Password,
-    ) -> Result<(), PasswordNotMatch> {
-        ensure_ok!(self.password.verify(&old).await, PasswordNotMatch);
+    pub async fn set_password(&mut self, old: String, new: Password) -> Result<(), SanityCheck> {
+        ensure_ok!(
+            self.password.verify(&old).await,
+            SanityCheck::PasswordNotMatch
+        );
         self.reset_password(new);
         Ok(())
     }
@@ -117,8 +116,6 @@ impl User {
         biz_ok!(())
     }
 }
-
-pub struct PasswordNotMatch;
 
 use derive_more::Display;
 

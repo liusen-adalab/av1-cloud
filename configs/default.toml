@@ -3,7 +3,8 @@ bind = "0.0.0.0"
 port = 5991
 
 [http_server.session]
-url = "redis://127.0.0.1:6379"
+# wsl ip
+url = "redis://172.21.117.50:6379"
 secure = false
 http_only = false
 max_age_secs = 3600_00
@@ -19,7 +20,8 @@ keydb_urls = [
 ]
 
 [postgres]
-url = "postgresql://postgres:password@127.0.0.1:54324/av1_cloud"
+# url = "postgresql://postgres:password@127.0.0.1:54324/av1_cloud"
+url = "postgresql://postgres:password@172.21.117.50:54324/av1_cloud"
 min_conn = 1
 max_conn = 50
 

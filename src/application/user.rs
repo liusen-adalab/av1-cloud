@@ -4,7 +4,9 @@ use utils::db_pools::postgres::{pg_conn, PgConn};
 use crate::{
     biz_ok,
     domain::user::{
-        service::{self, login_tx, LoginErr, RegisterErr, ResetPasswordErr, UpdateProfileErr},
+        service::{
+            self, login_tx, LoginErr, RegisterErr, ResetPasswordErr, SanityCheck, UpdateProfileErr,
+        },
         service_email::{self, CheckEmailCodeErr, SendEmailCodeErr},
         Email, Password, Phone, PhoneFormatErr, User, UserId, UserName,
     },
@@ -43,7 +45,7 @@ pub async fn register(user_dto: UserDto) -> BizResult<UserId, RegisterErr> {
     let password = ensure_biz!(Password::try_from_async(user_dto.password).await);
     ensure_biz!(
         EmailCodeSender::verify_email_code(&email, &user_dto.email_code).await?,
-        RegisterErr::EmailCodeMisMatch
+        SanityCheck::EmailCodeNotMatch
     );
 
     let user = User::create(email, password);
@@ -130,7 +132,7 @@ pub async fn update_profile(
         let phone = ensure_biz!(Phone::try_from(phone_params.tel));
         ensure_biz!(
             SmsSender::verify(&phone, phone_params.sms_code).await?,
-            UpdateProfileErr::SmsCodeMismatch
+            SanityCheck::SmsCodeNotMatch
         );
         Some(phone)
     } else {

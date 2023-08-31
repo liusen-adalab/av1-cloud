@@ -59,6 +59,17 @@ redis-cli -n 1 -h 10.0.10.59 flushdb
 PGPASSWORD=postgres psql -h 10.0.10.3 -p 30020 -U postgres -d av1_cloud -c "TRUNCATE TABLE users;"
 '''
 
+[tasks.sync]
+script = '''
+rsync -av --exclude='target' ./ /mnt/c/workspace/av1-cloud/
+'''
+
+[tasks.sync.windows]
+script = '''
+echo win11
+wsl rsync -av --exclude='target' ./ /home/sen/code/new-av1-workspace/av1-cloud/
+'''
+
 [tasks.d]
 alias = "deploy"
 
