@@ -130,7 +130,7 @@ impl std::error::Error for UserNameFormatErr {}
 
 impl UserName {
     pub fn try_from(value: String) -> Result<Self, UserNameFormatErr> {
-        ensure_ok!(value.len() > 2, UserNameFormatErr::TooShort);
+        ensure_ok!(value.len() >= 2, UserNameFormatErr::TooShort);
         ensure_ok!(value.len() < 16, UserNameFormatErr::TooLong);
 
         // ensure_ok!(

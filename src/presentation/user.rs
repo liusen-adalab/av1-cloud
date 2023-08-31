@@ -22,16 +22,16 @@ code! {
     err_trait = crate::http::HttpBizError; // http 状态码 trait 的路径
 
     pub PasswordFormat = 20 {
-        too_long = "密码太长了",
-        too_short = "密码太短了",
-        not_allowed_char = "密码中包含不允许使用的字符",
-        too_simple = "密码太简单了",
+        too_long = "密码太长了，请输入短于 16 个字符的密码",
+        too_short = "密码太短了， 请输入长于 8 个字符的密码",
+        not_allowed_char = "密码中包含不允许使用的字符，请输入字母、数字或下划线",
+        too_simple = "密码太简单了，请输入包含字母、数字和下划线的密码",
     }
 
     pub UserNameFormat = 30 {
-        too_long = "用户名太长了",
-        too_short = "用户名太短了",
-        not_allowed_char = "用户名中包含不允许使用的字符",
+        too_long = "用户名太长了，请输入短于 20 个字符的用户名",
+        too_short = "用户名太短了， 请输入长于 1 个字符的用户名",
+        not_allowed_char = "用户名中包含不允许使用的字符，请重新输入",
     }
 
     pub EmailFormat = 40 {
@@ -43,27 +43,27 @@ code! {
     }
 
     pub SanityCheck = 60 {
-        email_code_not_match = "邮箱验证码错误" ,
-        sms_code_not_match= "手机验证码错误",
-        password_not_match= "密码错误",
+        email_code_not_match = "邮箱验证码错误，请重新输入" ,
+        sms_code_not_match= "手机验证码错误，请重新输入",
+        password_not_match= "密码错误，请重新输入",
     }
 
     ---
 
     Register {
         use PasswordFormat,
-        alredy_register= "已注册",
-        no_email_code= "请先获取邮箱验证码",
+        alredy_register= "账号已被注册，请直接登录",
+        no_email_code= "请先获取邮箱验证码，再进行注册",
     }
 
     Login {
         use PasswordFormat,
-        account_not_match = "账号或密码错误",
+        account_not_match = "账号或密码错误，请重新输入",
     }
 
     SendEmailCode {
         use EmailFormat,
-        too_frequent = "获取邮箱验证"
+        too_frequent = "获取邮箱验证码太频繁了，请稍后再试"
     }
 
     CheckEmailCode {
@@ -76,7 +76,7 @@ code! {
 
     UpdateProfile {
         not_found = "账号不存在",
-        phone_already_binded ="该手机号已被绑定"
+        phone_already_binded = "该手机号已被绑定"
     }
 
     SendSmsCode {
