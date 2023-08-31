@@ -2,17 +2,19 @@ use serde::Deserialize;
 use utils::db_pools::postgres::{pg_conn, PgConn};
 
 use crate::{
+    biz_ok,
     domain::user::{
         service::{self, login_tx, LoginErr, RegisterErr, ResetPasswordErr, UpdateProfileErr},
         service_email::{self, CheckEmailCodeErr, SendEmailCodeErr},
-        Email, Password, Phone, User, UserId, UserName,
+        Email, Password, Phone, PhoneFormatErr, User, UserId, UserName,
     },
-    ensure_biz,
+    ensure_biz, ensure_exist,
     http::BizResult,
-    infrastructure::{email::EmailCodeSender, repo_user},
+    infrastructure::{email::EmailCodeSender, repo_user, sms_code::SmsSender},
     pg_tx, tx_func,
 };
 use anyhow::{bail, Result};
+use derive_more::From;
 
 pub async fn is_email_registerd(email: String) -> Result<bool> {
     let Ok(email) = Email::try_from(email) else {
@@ -124,9 +126,13 @@ pub async fn update_profile(
     user_id: UserId,
     update_info: UserUpdateDto,
 ) -> BizResult<(), UpdateProfileErr> {
-    let phone = if let Some(phone) = update_info.mobile_number {
-        // todo: verify sms code
-        Some(ensure_biz!(Phone::try_from(phone.tel)))
+    let phone = if let Some(phone_params) = update_info.mobile_number {
+        let phone = ensure_biz!(Phone::try_from(phone_params.tel));
+        ensure_biz!(
+            SmsSender::verify(&phone, phone_params.sms_code).await?,
+            UpdateProfileErr::SmsCodeMismatch
+        );
+        Some(phone)
     } else {
         None
     };
@@ -154,4 +160,21 @@ pub async fn update_profile(
     };
 
     pg_tx!(service::update_profile, user_id, update_info)
+}
+
+#[derive(From)]
+pub enum SendSmsCodeErr {
+    Phone(PhoneFormatErr),
+    TooFrequent,
+}
+
+pub async fn send_sms_code(tel: String, fake: bool) -> BizResult<(), SendSmsCodeErr> {
+    let tel = ensure_biz!(Phone::try_from(tel));
+    let sender = ensure_exist!(
+        SmsSender::try_build(&tel, fake).await?,
+        SendSmsCodeErr::TooFrequent
+    );
+    sender.send().await?;
+
+    biz_ok!(())
 }

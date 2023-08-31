@@ -26,7 +26,7 @@ use utils::db_pools::postgres::PgConn;
 pub struct UserPo<'a> {
     pub id: i64,
     pub name: Cow<'a, str>,
-    pub mobile_number: Option<String>,
+    pub mobile_number: Option<Cow<'a, str>>,
     pub email: Cow<'a, str>,
     pub password: Cow<'a, str>,
     pub address: Option<Cow<'a, str>>,
@@ -78,10 +78,10 @@ impl<'a> UserPo<'a> {
         Self {
             id: *user.id() as i64,
             name: Cow::Borrowed(&user.name()),
-            mobile_number: None,
+            mobile_number: user.mobile_number().as_ref().map(|p| Cow::Borrowed(&***p)),
             email: Cow::Borrowed(&user.email()),
             password: Cow::Borrowed(user.password().hashed_str()),
-            address: None,
+            address: user.address().as_ref().map(|a| Cow::Borrowed(&**a)),
             last_login: *user.login_at(),
             online: *user.online(),
         }

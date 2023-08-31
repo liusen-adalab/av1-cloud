@@ -6,7 +6,7 @@ use actix_web::{
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    application::user::{self, LoginDto, ResetPasswordDto, UserDto, UserUpdateDto},
+    application::user::{self, LoginDto, ResetPasswordDto, SendSmsCodeErr, UserDto, UserUpdateDto},
     code,
     domain::user::{
         service::{LoginErr, RegisterErr, ResetPasswordErr, UpdateProfileErr},
@@ -75,6 +75,9 @@ code! {
         password_not_match,
         phone_already_binded
     }
+    SendSmsCode {
+        too_frequent
+    }
 }
 
 macro_rules! password_err {
@@ -107,6 +110,12 @@ macro_rules! email_err {
         match $p {
             crate::domain::user::EmailFormatErr::Invalid => EMAIL_FORMAT.invalid.into(),
         }
+    };
+}
+
+macro_rules! phone_err {
+    () => {
+        PHONE_FORMAT_ERR.invalid.into()
     };
 }
 
@@ -160,6 +169,7 @@ impl From<ResetPasswordErr> for ApiError {
         }
     }
 }
+
 impl From<UpdateProfileErr> for ApiError {
     fn from(value: UpdateProfileErr) -> Self {
         match value {
@@ -170,6 +180,15 @@ impl From<UpdateProfileErr> for ApiError {
             UpdateProfileErr::SmsCodeMismatch => UPDATE_PROFILE.sms_code_mismatch.into(),
             UpdateProfileErr::PasswordWrong(_) => UPDATE_PROFILE.password_not_match.into(),
             UpdateProfileErr::PhoneAlreadyBinded => UPDATE_PROFILE.phone_already_binded.into(),
+        }
+    }
+}
+
+impl From<SendSmsCodeErr> for ApiError {
+    fn from(value: SendSmsCodeErr) -> Self {
+        match value {
+            SendSmsCodeErr::Phone(_) => phone_err!(),
+            SendSmsCodeErr::TooFrequent => SEND_SMS_CODE.too_frequent.into(),
         }
     }
 }
@@ -186,6 +205,7 @@ pub fn config(cfg: &mut web::ServiceConfig) {
             .service(web::resource("/logout").route(web::post().to(logout)))
             .service(web::resource("/reset_password").route(web::post().to(reset_password)))
             .service(web::resource("/modify_info").route(web::post().to(update_profile)))
+            .service(web::resource("/sms_code").route(web::get().to(send_sms_code)))
             .service(web::resource("/send_email_code").route(web::get().to(send_email_code))),
     );
 }
@@ -300,5 +320,23 @@ pub async fn reset_password(params: Json<ResetPasswordDto>) -> JsonResponse<()> 
 pub async fn update_profile(id: Identity, params: Json<UserUpdateDto>) -> JsonResponse<()> {
     let user_id = id.id()?.parse()?;
     user::update_profile(user_id, params.into_inner()).await??;
+    ApiResponse::Ok(())
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SendSmsCodeParams {
+    mobile_number: String,
+    #[serde(default)]
+    fake: bool,
+}
+
+pub async fn send_sms_code(params: Query<SendSmsCodeParams>) -> JsonResponse<()> {
+    let SendSmsCodeParams {
+        mobile_number,
+        fake,
+    } = params.into_inner();
+
+    user::send_sms_code(mobile_number, fake).await??;
     ApiResponse::Ok(())
 }

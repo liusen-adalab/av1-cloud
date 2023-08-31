@@ -16,7 +16,7 @@ pub mod service_email;
 pub type UserId = i64;
 
 #[derive(Getters, Debug)]
-#[getset(get = "pub")]
+#[getset(get = "pub(crate)")]
 pub struct User {
     #[getset(get_copy)]
     id: UserId,
@@ -292,7 +292,10 @@ pub fn po_to_do(user: UserPo) -> anyhow::Result<User> {
         email: Email::try_from(user.email.into_owned())?,
         password: Password(user.password.into_owned()),
         login_at: user.last_login,
-        mobile_number: user.mobile_number.map(|n| Phone::try_from(n)).transpose()?,
+        mobile_number: user
+            .mobile_number
+            .map(|n| Phone::try_from(n.into_owned()))
+            .transpose()?,
         address: user.address.map(|a| a.into_owned()),
         online: user.online,
     })
