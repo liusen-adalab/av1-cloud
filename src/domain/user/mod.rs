@@ -5,7 +5,6 @@ use crate::ensure_ok;
 
 pub mod employee;
 pub mod service;
-pub mod service_email;
 pub mod user;
 
 pub use common_err::*;

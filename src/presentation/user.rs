@@ -7,11 +7,11 @@ use serde::{Deserialize, Serialize};
 use utils::code;
 
 use crate::{
-    application::user::{self, LoginDto, ResetPasswordDto, SendSmsCodeErr, UserDto, UserUpdateDto},
-    domain::user::{
-        service::{LoginErr, RegisterErr, ResetPasswordErr, UpdateProfileErr},
-        service_email::{CheckEmailCodeErr, SendEmailCodeErr},
+    application::{
+        email::{self, CheckEmailCodeErr, SendEmailCodeErr},
+        user::{self, LoginDto, ResetPasswordDto, SendSmsCodeErr, UserDto, UserUpdateDto},
     },
+    domain::user::service::{LoginErr, RegisterErr, ResetPasswordErr, UpdateProfileErr},
     http::{ApiError, ApiResponse, JsonResponse},
     log_if_err,
 };
@@ -294,7 +294,7 @@ pub(crate) async fn check_email_code(
     params: Query<CheckEmailCodeParams>,
 ) -> JsonResponse<CheckEmailCodeResp> {
     let CheckEmailCodeParams { email, code } = params.into_inner();
-    let valid = user::check_email_code(email, code).await??;
+    let valid = email::verify_email_code(email, code).await??;
 
     ApiResponse::Ok(CheckEmailCodeResp { valid })
 }
@@ -334,7 +334,7 @@ pub struct SendEmailCodeParams {
 pub async fn send_email_code(params: Query<SendEmailCodeParams>) -> JsonResponse<()> {
     let SendEmailCodeParams { email, fake } = params.into_inner();
 
-    user::send_email_code(email, fake).await??;
+    email::send_email_code(email, fake).await??;
     ApiResponse::Ok(())
 }
 

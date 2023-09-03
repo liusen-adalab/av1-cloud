@@ -6,7 +6,6 @@ use crate::{
     biz_ok,
     domain::user::{
         service::{self, login_tx, LoginErr, RegisterErr, ResetPasswordErr, UpdateProfileErr},
-        service_email::{self, CheckEmailCodeErr, SendEmailCodeErr},
         user::{User, UserId},
         Email, Password, Phone, PhoneFormatErr, UserName,
     },
@@ -27,11 +26,6 @@ pub async fn is_email_registerd(email: String) -> Result<bool> {
     let conn = &mut pg_conn().await?;
     let exist = repo_user::exist(&email, conn).await?;
     Ok(exist)
-}
-
-pub async fn check_email_code(email: String, code: String) -> BizResult<bool, CheckEmailCodeErr> {
-    let email = ensure_biz!(Email::try_from(email));
-    service_email::check_email_code(email, &code).await
 }
 
 #[derive(Deserialize)]
@@ -80,11 +74,6 @@ pub async fn logout_tx(user_id: UserId, conn: &mut PgConn) -> anyhow::Result<()>
     repo_user::update(&user, conn).await?;
 
     Ok(())
-}
-
-pub async fn send_email_code(email: String, fake: bool) -> BizResult<(), SendEmailCodeErr> {
-    let email = ensure_biz!(Email::try_from(email));
-    service_email::send_email_code(email, fake).await
 }
 
 #[derive(Deserialize)]

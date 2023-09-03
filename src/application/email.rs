@@ -1,11 +1,10 @@
-use rand::Rng;
-
 use crate::{
-    biz_ok, domain::user::Email, ensure_exist, http::BizResult,
+    biz_ok,
+    domain::user::{Email, EmailFormatErr},
+    ensure_biz, ensure_exist,
+    http::BizResult,
     infrastructure::email::EmailCodeSender,
 };
-
-use super::EmailFormatErr;
 
 #[derive(derive_more::From)]
 pub enum SendEmailCodeErr {
@@ -13,16 +12,13 @@ pub enum SendEmailCodeErr {
     TooFrequent,
 }
 
-pub async fn send_email_code(email: Email, fake: bool) -> BizResult<(), SendEmailCodeErr> {
-    let code: u32 = rand::thread_rng().gen_range(100_000..999_999);
+pub async fn send_email_code(email: String, fake: bool) -> BizResult<(), SendEmailCodeErr> {
+    let email = ensure_biz!(Email::try_from(email));
     let sender = ensure_exist!(
-        EmailCodeSender::try_build(&**email, code).await?,
+        EmailCodeSender::try_build(&**email, fake).await?,
         SendEmailCodeErr::TooFrequent
     );
-    if !fake {
-        sender.send().await?;
-    }
-    sender.save().await?;
+    sender.send().await?;
 
     biz_ok!(())
 }
@@ -33,7 +29,8 @@ pub enum CheckEmailCodeErr {
     NoEmailCode,
 }
 
-pub async fn check_email_code(email: Email, code: &str) -> BizResult<bool, CheckEmailCodeErr> {
+pub async fn verify_email_code(email: String, code: String) -> BizResult<bool, CheckEmailCodeErr> {
+    let email = ensure_biz!(Email::try_from(email));
     let sent_code = EmailCodeSender::get_sent_code(&email).await?;
     let sent_code = ensure_exist!(sent_code, CheckEmailCodeErr::NoEmailCode).to_string();
     biz_ok!(sent_code == code)

@@ -5,6 +5,7 @@ use lettre::{
     message::header::ContentType, transport::smtp::authentication::Credentials, AsyncSmtpTransport,
     AsyncTransport, Message, Tokio1Executor,
 };
+use rand::{thread_rng, Rng};
 use redis::AsyncCommands;
 use serde::{Deserialize, Serialize};
 use tracing::{debug, warn};
@@ -42,11 +43,11 @@ pub fn get_email_code_template() -> &'static String {
 
 pub struct EmailCodeSender<'a> {
     email: &'a str,
-    code: u32,
+    fake: bool,
 }
 
 impl<'a> EmailCodeSender<'a> {
-    pub async fn try_build(email: &'a str, code: u32) -> Result<Option<EmailCodeSender<'a>>> {
+    pub async fn try_build(email: &'a str, fake: bool) -> Result<Option<EmailCodeSender<'a>>> {
         let key = format!("email:code_record:{}", &email);
         let conn = &mut redis_conn().await?;
 
@@ -57,29 +58,32 @@ impl<'a> EmailCodeSender<'a> {
             .await?;
 
         if set_ok {
-            Ok(Some(Self { email, code }))
+            Ok(Some(Self { email, fake }))
         } else {
             Ok(None)
         }
     }
 
     pub async fn send(&self) -> Result<()> {
-        debug!(code = self.code, "sending email code");
-        let config = &get_settings().email_code;
-        let template = get_email_code_template();
-        let body = template.replace("{{email_code}}", self.code.to_string().as_str());
-        let body = body.replace("{{email_target}}", self.email);
-        send_email(&config.from_full, self.email, &config.subject, body).await?;
-        Ok(())
-    }
+        let mut conn = redis_conn().await?;
 
-    pub async fn save(&self) -> Result<()> {
-        debug!(code = self.code, "saving email code");
-        let conn = &mut redis_conn().await?;
+        // 生成验证码
+        let code: i64 = thread_rng().gen_range(100000..999999);
 
+        if !self.fake {
+            // 发送验证码
+            let config = &get_settings().email_code;
+            let template = get_email_code_template();
+            let body = template.replace("{{email_code}}", code.to_string().as_str());
+            let body = body.replace("{{email_target}}", self.email);
+            send_email(&config.from_full, self.email, &config.subject, body).await?;
+        }
+
+        debug!(code, "email code sent");
         // 5 分钟有效期，在验证码加一个计数器
-        conn.set_ex(Self::key(&self.email), self.code * 10 + 5, 300)
+        conn.set_ex(Self::key(&self.email), code * 10 + 5, 300)
             .await?;
+
         Ok(())
     }
 
@@ -179,11 +183,10 @@ mod test {
 
         let to = "lzs@orientphoenix.com";
         let code = 123456;
-        let Some(sender) = EmailCodeSender::try_build(to, code).await? else {
+        let Some(sender) = EmailCodeSender::try_build(to, false).await? else {
             bail!("cannot build sender");
         };
         sender.send().await?;
-        sender.save().await?;
         let sent_code = EmailCodeSender::get_sent_code(to).await?;
 
         assert_eq!(sent_code.unwrap(), code);
