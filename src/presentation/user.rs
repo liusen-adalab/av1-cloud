@@ -226,6 +226,10 @@ pub fn config(cfg: &mut web::ServiceConfig) {
             .service(web::resource("/modify_info").route(web::post().to(update_profile)))
             .service(web::resource("/sms_code").route(web::get().to(send_sms_code)))
             .service(web::resource("/send_email_code").route(web::get().to(send_email_code))),
+    )
+    .service(
+        web::scope("/admin/user")
+            .service(web::resource("/modify").route(web::post().to(update_profile_by_employee))),
     );
 }
 
@@ -341,6 +345,27 @@ pub async fn reset_password(params: Json<ResetPasswordDto>) -> JsonResponse<()> 
 pub async fn update_profile(id: Identity, params: Json<UserUpdateDto>) -> JsonResponse<()> {
     let user_id = id.id()?.parse()?;
     user::update_profile(user_id, params.into_inner()).await??;
+    ApiResponse::Ok(())
+}
+
+#[derive(Deserialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct UserUpdateDtoByAdmin {
+    user_id: String,
+    #[serde(flatten)]
+    new_profile: UserUpdateDto,
+}
+
+pub async fn update_profile_by_employee(
+    _id: Identity,
+    params: Json<UserUpdateDtoByAdmin>,
+) -> JsonResponse<()> {
+    let UserUpdateDtoByAdmin {
+        user_id,
+        new_profile,
+    } = params.into_inner();
+    let user_id = user_id.parse()?;
+    user::update_profile(user_id, new_profile).await??;
     ApiResponse::Ok(())
 }
 
