@@ -5,8 +5,7 @@ use crate::{
     biz_ok,
     domain::user::{
         employee::{Employee, EmployeeId, InviteCode},
-        service::SanityCheck,
-        Email, EmailFormatErr, Password, PasswordFormatErr,
+        Email, EmailFormatErr, Password, PasswordFormatErr, SanityCheck,
     },
     ensure_biz, ensure_exist,
     http::BizResult,

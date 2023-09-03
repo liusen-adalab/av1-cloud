@@ -11,7 +11,9 @@ use crate::{
 use derive_more::From;
 
 use super::{
-    EmailFormatErr, Password, PasswordFormatErr, Phone, PhoneFormatErr, User, UserId, UserName,
+    common_err::SanityCheck,
+    user::{User, UserId},
+    EmailFormatErr, Password, PasswordFormatErr, Phone, PhoneFormatErr, UserName,
     UserNameFormatErr,
 };
 
@@ -20,8 +22,9 @@ pub enum RegisterErr {
     Name(UserNameFormatErr),
     Password(PasswordFormatErr),
     Email(EmailFormatErr),
-    AlreadyRegister,
     Sanity(SanityCheck),
+
+    AlreadyRegister,
 }
 
 pub async fn register(user: User) -> BizResult<UserId, RegisterErr> {
@@ -29,26 +32,21 @@ pub async fn register(user: User) -> BizResult<UserId, RegisterErr> {
 }
 
 pub async fn register_tx(user: User, conn: &mut PgConn) -> BizResult<UserId, RegisterErr> {
-    ensure_biz!(not repo_user::exist(&user.email, conn).await?, RegisterErr::AlreadyRegister);
+    ensure_biz!(not repo_user::exist(user.email(), conn).await?, RegisterErr::AlreadyRegister);
     // 上一步检查有概率漏检，所以应该以最后一步写入结果为准
     ensure_biz!(
         repo_user::save(&user, conn).await?.actually_effected(),
         RegisterErr::AlreadyRegister
     );
-    biz_ok!(user.id)
+    biz_ok!(*user.id())
 }
 
 #[derive(derive_more::From)]
 pub enum LoginErr {
     Password(PasswordFormatErr),
     Email(EmailFormatErr),
+    Sanity(SanityCheck),
     EmailOrPasswordWrong,
-}
-
-pub enum SanityCheck {
-    EmailCodeNotMatch,
-    SmsCodeNotMatch,
-    PasswordNotMatch,
 }
 
 pub async fn login_tx(
@@ -61,7 +59,7 @@ pub async fn login_tx(
     ensure_biz!(user.login(&password).await?);
     repo_user::update(&user, conn).await?;
 
-    biz_ok!(user.id)
+    biz_ok!(*user.id())
 }
 
 #[derive(From)]

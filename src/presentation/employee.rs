@@ -42,13 +42,13 @@ macro_rules! password_err {
 macro_rules! sanity_check {
     ($s:expr) => {{
         match $s {
-            crate::domain::user::service::SanityCheck::EmailCodeNotMatch => {
+            crate::domain::user::SanityCheck::EmailCodeNotMatch => {
                 SANITY_CHECK.email_code_not_match.into()
             }
-            crate::domain::user::service::SanityCheck::SmsCodeNotMatch => {
+            crate::domain::user::SanityCheck::SmsCodeNotMatch => {
                 SANITY_CHECK.sms_code_not_match.into()
             }
-            crate::domain::user::service::SanityCheck::PasswordNotMatch => {
+            crate::domain::user::SanityCheck::PasswordNotMatch => {
                 SANITY_CHECK.password_not_match.into()
             }
         }

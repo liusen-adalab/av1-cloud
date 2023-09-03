@@ -7,7 +7,7 @@ use flaken::Flaken;
 use getset::Getters;
 
 use crate::{
-    domain::user::service::SanityCheck, ensure_ok, infrastructure::repo_employee::EmployeePo,
+    domain::user::common_err::SanityCheck, ensure_ok, infrastructure::repo_employee::EmployeePo,
 };
 
 use super::{Email, Password, Phone, UserName};

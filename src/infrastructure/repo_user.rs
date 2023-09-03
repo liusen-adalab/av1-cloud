@@ -1,9 +1,9 @@
 use std::borrow::Cow;
 
 use crate::{
-    domain::{
-        self,
-        user::{Email, Phone, User, UserId},
+    domain::user::{
+        user::{User, UserId},
+        Email, Phone,
     },
     redis_conn_switch::redis_conn,
     schema::users,
@@ -118,7 +118,7 @@ where
                 .get_result(conn)
                 .await
                 .optional()?;
-            user.map(|u| domain::user::po_to_do(u)).transpose()
+            user.map(|u| User::from_po(u)).transpose()
         }};
     }
 
@@ -129,7 +129,7 @@ where
                 let mut r_conn = redis_conn().await?;
                 if let Some(user) = r_conn.get::<_, Option<String>>(user_key(email)).await? {
                     let user: UserPo = serde_json::from_str(&user)?;
-                    return Ok(Some(domain::user::po_to_do(user)?));
+                    return Ok(Some(User::from_po(user)?));
                 }
             }
 

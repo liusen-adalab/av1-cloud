@@ -1,10 +1,11 @@
 use std::borrow::Cow;
 
+use crate::domain::user::user::UserId;
 use crate::redis_conn_switch::redis_conn;
 use crate::{
     domain::user::{
         employee::{Employee, EmployeeId, InviteCode},
-        Email, Phone, UserId,
+        Email, Phone,
     },
     schema::employees,
 };

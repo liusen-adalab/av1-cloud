@@ -1,14 +1,14 @@
 use serde::Deserialize;
 use utils::db_pools::postgres::{pg_conn, PgConn};
 
+use crate::domain::user::SanityCheck;
 use crate::{
     biz_ok,
     domain::user::{
-        service::{
-            self, login_tx, LoginErr, RegisterErr, ResetPasswordErr, SanityCheck, UpdateProfileErr,
-        },
+        service::{self, login_tx, LoginErr, RegisterErr, ResetPasswordErr, UpdateProfileErr},
         service_email::{self, CheckEmailCodeErr, SendEmailCodeErr},
-        Email, Password, Phone, PhoneFormatErr, User, UserId, UserName,
+        user::{User, UserId},
+        Email, Password, Phone, PhoneFormatErr, UserName,
     },
     ensure_biz, ensure_exist,
     http::BizResult,

@@ -126,13 +126,13 @@ macro_rules! phone_err {
 macro_rules! sanity_check {
     ($s:expr) => {{
         match $s {
-            crate::domain::user::service::SanityCheck::EmailCodeNotMatch => {
+            crate::domain::user::SanityCheck::EmailCodeNotMatch => {
                 SANITY_CHECK.email_code_not_match.into()
             }
-            crate::domain::user::service::SanityCheck::SmsCodeNotMatch => {
+            crate::domain::user::SanityCheck::SmsCodeNotMatch => {
                 SANITY_CHECK.sms_code_not_match.into()
             }
-            crate::domain::user::service::SanityCheck::PasswordNotMatch => {
+            crate::domain::user::SanityCheck::PasswordNotMatch => {
                 SANITY_CHECK.password_not_match.into()
             }
         }
@@ -166,6 +166,7 @@ impl From<LoginErr> for ApiError {
             LoginErr::Password(a) => password_err!(a),
             LoginErr::Email(e) => email_err!(e),
             LoginErr::EmailOrPasswordWrong => LOGIN.account_not_match.into(),
+            LoginErr::Sanity(e) => sanity_check!(e),
         }
     }
 }
