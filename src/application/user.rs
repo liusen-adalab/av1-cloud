@@ -18,6 +18,8 @@ use crate::{
 use anyhow::{bail, Result};
 use derive_more::From;
 
+pub mod employee;
+
 pub async fn is_email_registerd(email: String) -> Result<bool> {
     let Ok(email) = Email::try_from(email) else {
         return Ok(false);

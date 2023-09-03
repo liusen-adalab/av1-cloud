@@ -406,11 +406,11 @@ macro_rules! doc_encpoints {
     ($($endpoint:ident {$($fields:tt)*})*) => {
         {
             paste::paste!{
-                let docs = vec![
+                let docs: Vec<Vec<Document>>= vec![
                     $([< doc_ $endpoint >]() ,)*
                 ];
             }
-            let docs: Vec<_> = docs.into_iter().flatten().collect();
+            let docs: Vec<Document> = docs.into_iter().flatten().collect();
             docs
         }
     };

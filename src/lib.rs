@@ -10,12 +10,15 @@ use anyhow::{Context, Result};
 use settings::get_settings;
 use tracing::info;
 
-use crate::{presentation::user, settings::load_settings};
+use crate::{
+    presentation::{employee, user},
+    settings::load_settings,
+};
 
 pub mod application;
 pub mod domain;
 pub mod infrastructure;
-pub mod presentation;
+mod presentation;
 
 pub mod http;
 pub mod logger;
@@ -40,6 +43,7 @@ pub async fn build_http_server() -> Result<Server> {
         let cors = Cors::permissive();
         App::new()
             .configure(user::config)
+            .configure(employee::config)
             .route("/ping", web::get().to(http_ping))
             .wrap(IdentityMiddleware::default())
             .wrap(sss)

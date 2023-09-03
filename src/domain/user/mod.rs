@@ -10,6 +10,7 @@ use crate::{biz_ok, ensure_biz, ensure_ok, http::BizResult, infrastructure::repo
 
 use self::service::{LoginErr, SanityCheck, UpdateProfileErr, UserUpdate};
 
+pub mod employee;
 pub mod service;
 pub mod service_email;
 

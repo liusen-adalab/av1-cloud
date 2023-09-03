@@ -36,7 +36,7 @@ macro_rules! ensure_exist {
     ($predict:expr, $err:expr) => {
         match $predict {
             Some(v) => v,
-            None => return Ok(Err($err)),
+            None => return Ok(Err($err.into())),
         }
     };
 }
