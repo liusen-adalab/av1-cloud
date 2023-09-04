@@ -31,6 +31,8 @@ pub struct User {
     pub create_at: MillionTimestamp,
     /// 是否在线
     pub online: bool,
+    /// 地址
+    pub address: Option<String>,
 }
 
 #[ComplexObject]
