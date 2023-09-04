@@ -106,6 +106,8 @@ pub async fn init_global() -> Result<()> {
         utils::db_pools::redis::init(&settings.redis).await?;
     }
 
+    application::user::employee::register_root().await?;
+
     info!("global environment loaded");
     Ok(())
 }

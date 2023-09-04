@@ -1,5 +1,5 @@
 use serde::Deserialize;
-use utils::db_pools::postgres::PgConn;
+use utils::db_pools::postgres::{pg_conn, PgConn};
 
 use crate::{
     biz_ok,
@@ -61,6 +61,7 @@ pub async fn register_tx(
         repo_employee::get_invitor_id(&code).await?,
         RegisterErr::NoInvitor
     );
+
     // register
     let employee = Employee::create(email, password, invitor);
 
@@ -72,6 +73,28 @@ pub async fn register_tx(
         RegisterErr::AlreadyRegistered
     );
     biz_ok!(*employee.id())
+}
+
+pub async fn register_root() -> anyhow::Result<()> {
+    let conn = &mut pg_conn().await?;
+
+    let email = Email::try_from("root@cc.com".to_string()).unwrap();
+    let password = Password::try_from_async("12341234".to_string())
+        .await
+        .unwrap();
+    let root = Employee::create(email, password, 0);
+    let _ = repo_employee::save(&root, conn).await?;
+    let root_id = *repo_employee::find(root.email(), conn).await?.unwrap().id();
+
+    for i in 1..=5 {
+        let email = Email::try_from(format!("admin{}@cc.com", i)).unwrap();
+        let password = Password::try_from_async("aabbccdd".to_string())
+            .await
+            .unwrap();
+        let employee = Employee::create(email, password, root_id);
+        let _ = repo_employee::save(&employee, conn).await?;
+    }
+    Ok(())
 }
 
 #[derive(From)]

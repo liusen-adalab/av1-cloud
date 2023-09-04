@@ -62,7 +62,7 @@ impl Employee {
     pub fn create(email: Email, password: Password, invitor: EmployeeId) -> Self {
         Self {
             id: Self::next_id(),
-            name: UserName::try_from("default-employee".to_string()).unwrap(),
+            name: UserName::try_from("employee".to_string()).unwrap(),
             password,
             login_at: Local::now().naive_local(),
             mobile_number: None,

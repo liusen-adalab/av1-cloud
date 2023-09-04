@@ -36,7 +36,7 @@ impl User {
     pub fn create(email: Email, password: Password) -> Self {
         Self {
             id: Self::next_id() as i64,
-            name: UserName::try_from("default-user".to_string()).unwrap(),
+            name: UserName::try_from("user".to_string()).unwrap(),
             email,
             password,
             login_at: Local::now().naive_local(),
