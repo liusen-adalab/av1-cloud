@@ -70,6 +70,11 @@ echo win11
 wsl rsync -av --exclude='target' ./ /home/sen/code/new-av1-workspace/av1-cloud/
 '''
 
+[tasks.pg-reset.windows]
+script = '''
+wsl /home/sen/.cargo/bin/diesel database reset
+'''
+
 [tasks.d]
 alias = "deploy"
 
