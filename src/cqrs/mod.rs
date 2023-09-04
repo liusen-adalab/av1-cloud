@@ -4,7 +4,8 @@ use ::diesel::{deserialize::FromSqlRow, expression::AsExpression};
 use actix_identity::Identity;
 use actix_web::{web, HttpResponse};
 use async_graphql::{
-    http::GraphiQLSource, scalar, Context, EmptyMutation, EmptySubscription, Object, Schema,
+    http::GraphiQLSource, scalar, Context, EmptyMutation, EmptySubscription, InputObject, Object,
+    Schema,
 };
 use async_graphql_actix_web::{GraphQLRequest, GraphQLResponse};
 use chrono::NaiveDateTime;
@@ -32,11 +33,13 @@ pub type Av1Schema = Schema<QueryRoot, EmptyMutation, EmptySubscription>;
 pub struct QueryRoot;
 
 #[Object]
+/// 查询根节点
 impl QueryRoot {
     async fn ping(&self) -> &'static str {
         "pong"
     }
 
+    /// 获取用户
     async fn user(&self, ctx: &Context<'_>) -> async_graphql::Result<User> {
         let id = userid_unchecked(ctx);
         let id = User::load(id).await?;
@@ -52,15 +55,22 @@ pub type AdminSchema = Schema<AdminQueryRoot, EmptyMutation, EmptySubscription>;
 pub struct AdminQueryRoot;
 
 #[Object]
+/// 管理员查询根节点
 impl AdminQueryRoot {
     async fn ping(&self) -> &'static str {
         "pong"
     }
 
+    /// 获取用户
     async fn user(&self, id: String) -> async_graphql::Result<User> {
         let id = id.parse()?;
         let id = User::load(id).await?;
         Ok(id)
+    }
+
+    /// 获取用户列表
+    async fn user_list(&self, params: UserSearchParams) -> async_graphql::Result<UserList> {
+        Ok(User::list(params).await?)
     }
 }
 
@@ -101,7 +111,7 @@ async fn playgroud_dev() -> actix_web::Result<HttpResponse> {
 
 use derive_more::From;
 
-use self::user::{User, UserId};
+use self::user::{User, UserId, UserList, UserSearchParams};
 
 #[derive(Deserialize, From, Debug, AsExpression, FromSqlRow)]
 #[diesel(sql_type = ::diesel::sql_types::BigInt)]
@@ -128,6 +138,21 @@ impl Serialize for MillionTimestamp {
         S: serde::Serializer,
     {
         serializer.serialize_i64(self.0.timestamp_millis())
+    }
+}
+
+#[derive(Debug, InputObject)]
+pub struct Paginate {
+    /// 页码，从 1 开始
+    pub page: u32,
+    /// 每页大小
+    pub page_size: u32,
+}
+
+impl Paginate {
+    pub fn cursor(&self) -> Option<u32> {
+        let page_idx = self.page.checked_sub(1)?;
+        page_idx.checked_mul(self.page_size)
     }
 }
 
