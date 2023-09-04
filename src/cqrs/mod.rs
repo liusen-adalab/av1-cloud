@@ -25,6 +25,11 @@ pub fn actix_config(cfg: &mut web::ServiceConfig) {
             web::resource("/api/query/dev")
                 .route(web::post().to(index_dev))
                 .route(web::get().to(playgroud_dev)),
+        )
+        .service(
+            web::resource("/admin/query")
+                .route(web::post().to(index_dev))
+                .route(web::get().to(playgroud_dev)),
         );
 }
 
