@@ -230,6 +230,7 @@ pub fn config(cfg: &mut web::ServiceConfig) {
     )
     .service(
         web::scope("/admin/user")
+            .service(web::resource("/doc").route(web::get().to(get_resp_status_doc)))
             .service(web::resource("/modify").route(web::post().to(update_profile_by_employee))),
     );
 }

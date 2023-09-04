@@ -18,13 +18,8 @@ pub fn actix_config(cfg: &mut web::ServiceConfig) {
         .app_data(actix_web::web::Data::new(schema_dev))
         .service(
             web::resource("/api/query")
-                .route(web::get().to(playgroud))
-                .route(web::post().to(index)),
-        )
-        .service(
-            web::resource("/api/query/dev")
-                .route(web::post().to(index_dev))
-                .route(web::get().to(playgroud_dev)),
+                .route(web::post().to(index))
+                .route(web::get().to(playgroud)),
         )
         .service(
             web::resource("/admin/query")
@@ -82,10 +77,15 @@ impl AdminQueryRoot {
 async fn index(
     schema: web::Data<Av1Schema>,
     req: GraphQLRequest,
-    id: Identity,
+    id: Option<Identity>,
 ) -> actix_web::Result<GraphQLResponse> {
-    let req = req.into_inner();
+    let mut req = req.into_inner();
+    if id.is_none() {
+        req = req.only_introspection();
+        return Ok(schema.execute(req).await.into());
+    }
     let id: i64 = id
+        .unwrap()
         .id()
         .map_err(|err| -> Box<dyn std::error::Error> { format!("{}", err).into() })?
         .parse()
@@ -111,7 +111,7 @@ async fn index_dev(
 async fn playgroud_dev() -> actix_web::Result<HttpResponse> {
     Ok(HttpResponse::Ok()
         .content_type("text/html; charset=utf-8")
-        .body(GraphiQLSource::build().endpoint("/api/query/dev").finish()))
+        .body(GraphiQLSource::build().endpoint("/admin/query").finish()))
 }
 
 use derive_more::From;
