@@ -75,6 +75,11 @@ script = '''
 wsl /home/sen/.cargo/bin/diesel database reset
 '''
 
+[tasks.pg-reset.linux]
+script = '''
+/home/sen/.cargo/bin/diesel database reset --database-url 'postgresql://postgres:password@10.0.10.3:30020/av1_cloud'
+'''
+
 [tasks.d]
 alias = "deploy"
 
