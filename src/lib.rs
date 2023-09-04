@@ -20,6 +20,7 @@ pub mod domain;
 pub mod infrastructure;
 mod presentation;
 
+mod cqrs;
 pub mod http;
 pub mod logger;
 mod schema;
@@ -44,6 +45,7 @@ pub async fn build_http_server() -> Result<Server> {
         App::new()
             .configure(user::config)
             .configure(employee::config)
+            .configure(cqrs::actix_config)
             .route("/ping", web::get().to(http_ping))
             .wrap(IdentityMiddleware::default())
             .wrap(sss)
