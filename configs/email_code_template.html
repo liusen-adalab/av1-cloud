@@ -6,14 +6,17 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Document</title>
     <style>
-        body {
-            background-color: #F4F4F4;
+        .body {
+            background-color: #ffffff;
+            height: 100%;
+            width: 100%;
+            padding: 100px 0;
         }
 
         .card {
             width: 720px;
-            margin: 100px auto;
-            background-color: #fff;
+            margin: 0 auto;
+            background-color: #ffffff;
             padding: 32px;
             margin-bottom: 16px;
             box-shadow: 0px 6px 16px 0px rgba(0, 0, 0, 0.08);
@@ -73,19 +76,21 @@
 </head>
 
 <body>
-    <div class="card">
-        <div class="logo">
-            <img src="https://s1.ax1x.com/2023/08/31/pPwvHFx.png" />
+    <div class="body">
+        <div class="card">
+            <div class="logo">
+                <img src="https://s1.ax1x.com/2023/08/31/pPwvHFx.png" />
+            </div>
+            <h1>电子邮箱验证码</h1>
+            <p>尊敬的 AV1 用户，您好！</p>
+            <p>您的 AV1 账号：{{email_target}} 正在请求电子邮箱验证，验证码为：</p>
+            <div class="code">{{email_code}}</div>
+            <p>请在<span class="periodOfValidity"> 5 </span>分钟内完成验证。AV1 不会向您索取验证码信息，请勿泄露。</p>
+            <p class="right">此致</p>
+            <p class="conpany">AVI 团队</p>
         </div>
-        <h1>电子邮箱验证码</h1>
-        <p>尊敬的 AV1 用户，您好！</p>
-        <p>您的 AV1 账号：{{email_target}} 正在请求电子邮箱验证，验证码为：</p>
-        <div class="code">{{email_code}}</div>
-        <p>请在<span class="periodOfValidity"> 5 </span>分钟内完成验证。AV1 不会向您索取验证码信息，请勿泄露。</p>
-        <p class="right">此致</p>
-        <p class="conpany">AVI 团队</p>
+        <p class="mask">此邮件由系统发送，请勿回复</p>
     </div>
-    <p class="mask">此邮件由系统发送，请勿回复</p>
 </body>
 
 </html>

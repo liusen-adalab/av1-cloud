@@ -5,6 +5,8 @@ use chrono::{Local, NaiveDateTime};
 use derive_more::*;
 use flaken::Flaken;
 use getset::Getters;
+use rand::{thread_rng, Rng};
+use serde::{Deserialize, Serialize};
 
 use crate::{
     domain::user::common_err::SanityCheck, ensure_ok, infrastructure::repo_employee::EmployeePo,
@@ -29,11 +31,12 @@ pub struct Employee {
 }
 
 #[repr(i16)]
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum Role {
     Employee,
     Manager,
-    Admin,
+    Root,
 }
 
 impl TryFrom<i16> for Role {
@@ -43,7 +46,7 @@ impl TryFrom<i16> for Role {
         match value {
             0 => Ok(Self::Employee),
             1 => Ok(Self::Manager),
-            2 => Ok(Self::Admin),
+            2 => Ok(Self::Root),
             _ => bail!("invalid role value: {}", value),
         }
     }
@@ -54,7 +57,8 @@ pub struct InviteCode(String);
 
 impl InviteCode {
     pub(crate) fn generate() -> Self {
-        todo!()
+        let code: i64 = thread_rng().gen_range(100000..999999);
+        Self(code.to_string())
     }
 }
 
@@ -70,6 +74,10 @@ impl Employee {
             role: Role::Employee,
             invited_by: invitor,
         }
+    }
+
+    pub fn set_role(&mut self, role: Role) {
+        self.role = role;
     }
 
     pub async fn login(&mut self, password: &str) -> Result<(), SanityCheck> {

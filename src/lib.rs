@@ -1,3 +1,7 @@
+use actix_casbin_auth::{
+    casbin::{function_map::key_match2, CoreApi, DefaultModel, FileAdapter},
+    CasbinService,
+};
 use actix_cors::Cors;
 use actix_identity::IdentityMiddleware;
 use actix_session::{config::PersistentSession, storage::RedisSessionStore, SessionMiddleware};
@@ -20,6 +24,7 @@ pub mod domain;
 pub mod infrastructure;
 mod presentation;
 
+pub mod auth;
 mod cqrs;
 pub mod http;
 pub mod logger;
@@ -38,23 +43,48 @@ pub async fn build_http_server() -> Result<Server> {
     let settings = &get_settings().http_server;
     info!(?settings, "building http server. Powered by actix-web!");
 
+    let casbin_middleware = build_casbin_mw().await?;
+
     let store = RedisSessionStore::new(&settings.session.url).await?;
     let server: Server = HttpServer::new(move || {
-        let sss = build_session_mw(store.clone());
+        let session = build_session_mw(store.clone());
         let cors = Cors::permissive();
         App::new()
             .configure(user::config)
             .configure(employee::config)
             .configure(cqrs::actix_config)
             .route("/ping", web::get().to(http_ping))
+            .wrap(casbin_middleware.clone())
+            .wrap(auth::RoleExtractor)
             .wrap(IdentityMiddleware::default())
-            .wrap(sss)
+            .wrap(session)
             .wrap(cors)
     })
     .bind((&*settings.bind, settings.port))?
     .run();
 
     Ok(server)
+}
+
+async fn build_casbin_mw() -> Result<CasbinService, anyhow::Error> {
+    let m = DefaultModel::from_file("configs/rbac.conf").await.unwrap();
+    let a = FileAdapter::new("configs/rbac.csv");
+    let casbin_middleware = CasbinService::new(m, a).await?;
+    casbin_middleware
+        .write()
+        .await
+        .get_role_manager()
+        .write()
+        .matching_fn(Some(key_match2), None);
+    Ok(casbin_middleware)
+}
+
+pub async fn t_user() -> &'static str {
+    "t_user"
+}
+
+pub async fn t_admin() -> &'static str {
+    "t_admin"
 }
 
 fn build_session_mw(store: RedisSessionStore) -> SessionMiddleware<RedisSessionStore> {
@@ -112,6 +142,7 @@ pub async fn init_global() -> Result<()> {
             .context("init redis pool")?;
     }
 
+    #[cfg(feature = "register_root")]
     application::user::employee::register_root().await?;
 
     info!("global environment loaded");

@@ -1,4 +1,5 @@
 use actix_identity::Identity;
+use actix_session::SessionExt;
 use actix_web::web::{self, Json};
 use actix_web::{HttpMessage, HttpRequest};
 use utils::code;
@@ -96,14 +97,24 @@ pub async fn generate_invite_code(id: Identity) -> JsonResponse<String> {
 }
 
 pub async fn register(params: Json<EmployeeRegisterDto>, req: HttpRequest) -> JsonResponse<()> {
-    let id = employee::register(params.into_inner()).await??;
+    let params = params.into_inner();
+    let (id, role) = employee::register(params.clone()).await??;
+
     Identity::login(&req.extensions(), id.to_string())?;
+    let session = req.get_session();
+    session.insert("role", role)?;
+
     ApiResponse::Ok(())
 }
 
 pub async fn login(params: Json<LoginDto>, req: HttpRequest) -> JsonResponse<()> {
-    let id = employee::login(params.into_inner()).await??;
+    let (id, role) = employee::login(params.into_inner()).await??;
+
     Identity::login(&req.extensions(), id.to_string())?;
+    let session = req.get_session();
+    session.insert("role", role)?;
+
+    // session
     ApiResponse::Ok(())
 }
 

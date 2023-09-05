@@ -65,6 +65,9 @@ hmac = "0.12.1"
 hex = "0.4.3"
 async-graphql = "6.0.5"
 async-graphql-actix-web = "6.0.5"
+actix-casbin-auth = { git = "https://github.com/casbin-rs/actix-casbin-auth.git", version = "0.4.4", default-features = false, features = [
+    "runtime-tokio",
+] }
 
 [dev-dependencies]
 # 必须使用 rustls，因为 arch 系统的 openssl 产生了不兼容的更改
@@ -78,6 +81,7 @@ path = "utils"
 features = ["code"]
 
 [features]
-default = ["keydb"]
+default = ["keydb", "register_root"]
 keydb = ["utils/keydb"]
 redis = ["utils/redis"]
+register_root = []

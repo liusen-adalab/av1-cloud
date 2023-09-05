@@ -1,0 +1,38 @@
+#   用户组，资源组，操作
+
+# p, user_group, user_data_group, (GET)|(POST)|(PUT)|(DELETE)
+
+# 员工可以读用户信息，但是不能修改
+p, employee_group, employee_data_group, GET
+# 员工可以调用 graphql 接口
+p, employee_group, /admin/query, (GET)|(POST)
+
+# 经理可以读写用户信息，但是不能删除
+p, manager, employee_data_group, (GET)|(POST)
+
+# root 用户拥有所有权限
+p, root, employee_data_group, (GET)|(POST)|(PUT)|(DELETE)
+
+# 只有 root 用户可以调用某些接口
+p, root, root_data_group, (GET)|(POST)|(PUT)|(DELETE)
+
+# m = g3(r.obj, "pub_endpoint") || (g(r.sub, p.sub) && g2(r.obj, p.obj) && regexMatch(r.act, p.act))
+
+# g 定义用户组
+g, user, user_group
+g, employee, employee_group
+g, manager, employee_group
+g, root, employee_group
+
+# 只有 root 用户可以生成邀请码
+g2, /admin/employee/invite_code, root_data_group
+## 其余 admin 开头的接口，只有登录的内部用户才能调用
+g2, /admin/*, employee_data_group
+
+# 公开的接口
+g3, /admin/employee/register, pub_endpoint
+g3, /admin/employee/login, pub_endpoint
+g3, /admin/employee/logout, pub_endpoint
+# 可能需要细化这些接口的权限，目前先放开
+g3, /api/*, pub_endpoint
+g3, /ping, pub_endpoint
