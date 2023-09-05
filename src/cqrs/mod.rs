@@ -161,6 +161,22 @@ impl Paginate {
     }
 }
 
+#[derive(Serialize, Deserialize, Debug)]
+pub struct Address(Vec<String>);
+scalar!(Address);
+
+impl From<String> for Address {
+    fn from(value: String) -> Self {
+        Self(value.split(",").map(ToOwned::to_owned).collect())
+    }
+}
+
+impl<'a> From<&'a Address> for String {
+    fn from(value: &'a Address) -> Self {
+        value.0.join(",")
+    }
+}
+
 mod diesel_impl {
     use diesel::{
         backend::Backend,
@@ -181,8 +197,24 @@ mod diesel_impl {
 
             impl FromSql<$pg_type, Pg> for $type {
                 fn from_sql(bytes: <Pg as Backend>::RawValue<'_>) -> deserialize::Result<Self> {
-                    let time = FromSql::<$pg_type, Pg>::from_sql(bytes)?;
-                    Ok(Self(time))
+                    let res = FromSql::<$pg_type, Pg>::from_sql(bytes)?;
+                    Ok(Self(res))
+                }
+            }
+        };
+
+        ($type:ty, $pg_type:ty, map_to: $map_ty:ty) => {
+            impl ToSql<$pg_type, Pg> for $type {
+                fn to_sql<'b>(&'b self, out: &mut Output<'b, '_, Pg>) -> serialize::Result {
+                    let map_to = <$map_ty>::from(self);
+                    ToSql::<$pg_type, Pg>::to_sql(&map_to, &mut out.reborrow())
+                }
+            }
+
+            impl FromSql<$pg_type, Pg> for $type {
+                fn from_sql(bytes: <Pg as Backend>::RawValue<'_>) -> deserialize::Result<Self> {
+                    let res: $map_ty = FromSql::<$pg_type, Pg>::from_sql(bytes)?;
+                    Ok(Self::from(res))
                 }
             }
         };
@@ -190,4 +222,5 @@ mod diesel_impl {
 
     diesel_new_type!(MillionTimestamp, diesel::sql_types::Timestamp);
     diesel_new_type!(super::FlakeId, diesel::sql_types::BigInt);
+    diesel_new_type!(super::Address, diesel::sql_types::Text, map_to: String);
 }

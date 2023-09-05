@@ -32,7 +32,7 @@ pub struct User {
     /// 是否在线
     pub online: bool,
     /// 地址
-    pub address: Option<String>,
+    pub address: Option<super::Address>,
 }
 
 #[ComplexObject]
