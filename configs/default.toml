@@ -1,10 +1,10 @@
 [http_server]
-bind = "0.0.0.0"
+bind = "127.0.0.1"
 port = 5991
 
 [http_server.session]
 # wsl ip
-url = "redis://172.21.117.50:6379"
+url = "redis://127.0.0.1:16379"
 secure = false
 http_only = false
 max_age_secs = 3600_00
@@ -13,17 +13,12 @@ max_age_secs = 3600_00
 level = "debug"
 
 [keydb]
-keydb_urls = [
-    "redis://10.0.10.70/",
-    "redis://10.0.10.71/",
-    "redis://10.0.10.72/",
-]
+keydb_urls = ["redis://127.0.0.1:46371"]
 
 [postgres]
-# url = "postgresql://postgres:password@127.0.0.1:54324/av1_cloud"
-url = "postgresql://postgres:password@172.21.117.50:54324/av1_cloud"
+url = "postgresql://postgres:postgres@127.0.0.1:54333/av1-cloud"
 min_conn = 1
-max_conn = 50
+max_conn = 20
 
 [email_code]
 from_full = "test <test@orientphoenix.com>"

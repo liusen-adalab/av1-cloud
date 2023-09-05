@@ -93,17 +93,23 @@ pub async fn init_global() -> Result<()> {
         None
     };
 
-    let settings = load_settings(cfg_path)?;
+    let settings = load_settings(cfg_path).context("load settings")?;
     logger::init(&settings.log)?;
 
     infrastructure::email::load_email_code_template().context("load email-code-template")?;
 
-    utils::db_pools::postgres::init(&settings.postgres).await?;
+    utils::db_pools::postgres::init(&settings.postgres)
+        .await
+        .context("init pg pool")?;
     {
         #[cfg(feature = "keydb")]
-        utils::db_pools::keydb::init(&settings.redis).await?;
+        utils::db_pools::keydb::init(&settings.redis)
+            .await
+            .context("init keydb pool")?;
         #[cfg(feature = "redis")]
-        utils::db_pools::redis::init(&settings.redis).await?;
+        utils::db_pools::redis::init(&settings.redis)
+            .await
+            .context("init redis pool")?;
     }
 
     application::user::employee::register_root().await?;
