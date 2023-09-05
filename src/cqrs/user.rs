@@ -36,7 +36,15 @@ pub struct User {
 }
 
 #[ComplexObject]
-impl User {}
+impl User {
+    pub async fn level(&self) -> async_graphql::Result<UserLevel> {
+        Ok(UserLevel::Normal)
+    }
+
+    pub async fn status(&self) -> async_graphql::Result<UserStatus> {
+        Ok(UserStatus::Ok)
+    }
+}
 
 impl User {
     pub async fn load(id: UserId) -> anyhow::Result<User> {
