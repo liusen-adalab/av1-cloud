@@ -1,4 +1,3 @@
-use chrono::NaiveDateTime;
 use getset::Getters;
 use std::sync::{Mutex, OnceLock};
 
@@ -7,7 +6,7 @@ use flaken::Flaken;
 
 use crate::{
     biz_ok, domain::user::common_err::SanityCheck, ensure_biz, ensure_ok, http::BizResult,
-    infrastructure::repo_user::UserPo,
+    infrastructure::repo_user::UserPo, LocalDataTime,
 };
 
 use super::{
@@ -29,7 +28,7 @@ pub struct User {
     address: Option<String>,
     online: bool,
 
-    login_at: NaiveDateTime,
+    login_at: LocalDataTime,
 }
 
 impl User {
@@ -39,7 +38,7 @@ impl User {
             name: UserName::try_from("user".to_string()).unwrap(),
             email,
             password,
-            login_at: Local::now().naive_local(),
+            login_at: Local::now(),
             mobile_number: None,
             address: None,
             online: true,
@@ -51,7 +50,7 @@ impl User {
             self.password.verify(password).await,
             SanityCheck::PasswordNotMatch
         );
-        self.login_at = Local::now().naive_local();
+        self.login_at = Local::now();
         self.online = true;
         biz_ok!(())
     }

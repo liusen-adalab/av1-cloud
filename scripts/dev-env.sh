@@ -10,7 +10,7 @@ version: '3'
 services:
 EOF
 
-keydb_worker_dir=$SCRIPTPATH/../target/dev-keydb
+keydb_worker_dir=$SCRIPTPATH/../dev-keydb
 for i in {1..6}; do
     config_path=${keydb_worker_dir}/keydb${i}.conf
     data_path=${keydb_worker_dir}/data/keydb${i}

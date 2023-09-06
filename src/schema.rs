@@ -7,11 +7,11 @@ diesel::table! {
         mobile_number -> Nullable<Varchar>,
         email -> Varchar,
         password -> Bpchar,
-        last_login -> Timestamp,
+        last_login -> Timestamptz,
         invited_by -> Int8,
         role -> Int2,
-        create_at -> Timestamp,
-        updated_at -> Timestamp,
+        create_at -> Timestamptz,
+        updated_at -> Timestamptz,
     }
 }
 
@@ -23,9 +23,9 @@ diesel::table! {
         email -> Varchar,
         address -> Nullable<Varchar>,
         password -> Bpchar,
-        last_login -> Timestamp,
-        create_at -> Timestamp,
-        updated_at -> Timestamp,
+        last_login -> Timestamptz,
+        create_at -> Timestamptz,
+        updated_at -> Timestamptz,
         online -> Bool,
     }
 }

@@ -8,7 +8,6 @@ use async_graphql::{
     Schema,
 };
 use async_graphql_actix_web::{GraphQLRequest, GraphQLResponse};
-use chrono::NaiveDateTime;
 use serde::{Deserialize, Serialize};
 
 pub fn actix_config(cfg: &mut web::ServiceConfig) {
@@ -134,7 +133,7 @@ impl Serialize for FlakeId {
 
 #[derive(Deserialize, From, Debug, AsExpression, FromSqlRow)]
 #[diesel(sql_type = ::diesel::sql_types::Timestamp)]
-pub struct MillionTimestamp(NaiveDateTime);
+pub struct MillionTimestamp(chrono::DateTime<chrono::Local>);
 scalar!(MillionTimestamp);
 
 impl Serialize for MillionTimestamp {
@@ -220,7 +219,7 @@ mod diesel_impl {
         };
     }
 
-    diesel_new_type!(MillionTimestamp, diesel::sql_types::Timestamp);
+    diesel_new_type!(MillionTimestamp, diesel::pg::sql_types::Timestamptz);
     diesel_new_type!(super::FlakeId, diesel::sql_types::BigInt);
     diesel_new_type!(super::Address, diesel::sql_types::Text, map_to: String);
 }
