@@ -56,7 +56,19 @@ done
 redis-cli -n 1 -h 10.0.10.59 flushdb
 
 # db
-PGPASSWORD=postgres psql -h 10.0.10.3 -p 30020 -U postgres -d av1_cloud -c "TRUNCATE TABLE users;"
+for i in {15..16}
+do
+    server=web${i}
+    ssh ${server} "systemctl stop av1-cloud || true"
+done
+
+/home/sen/.cargo/bin/diesel database reset --database-url postgres://postgres:postgres@10.0.10.85:5433/av1_cloud
+
+for i in {15..16}
+do
+    server=web${i}
+    ssh ${server} "systemctl restart av1-cloud"
+done
 '''
 
 [tasks.sync]
@@ -77,9 +89,10 @@ wsl /home/sen/.cargo/bin/diesel database reset
 
 [tasks.pg-reset.linux]
 script = '''
-/home/sen/.cargo/bin/diesel database reset --database-url 'postgresql://postgres:password@10.0.10.3:30020/av1_cloud'
+/home/sen/.cargo/bin/diesel database reset
 '''
 
+##############################
 [tasks.d]
 alias = "deploy"
 

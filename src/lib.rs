@@ -39,6 +39,8 @@ pub mod redis_conn_switch {
     pub use utils::db_pools::redis::redis_conn;
 }
 
+pub type LocalDataTime = chrono::DateTime<chrono::Local>;
+
 pub async fn build_http_server() -> Result<Server> {
     let settings = &get_settings().http_server;
     info!(?settings, "building http server. Powered by actix-web!");

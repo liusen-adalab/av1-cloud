@@ -7,9 +7,9 @@ use crate::{
     },
     redis_conn_switch::redis_conn,
     schema::users,
+    LocalDataTime,
 };
 use anyhow::Result;
-use chrono::NaiveDateTime;
 use diesel::{
     AsChangeset, ExpressionMethods, Identifiable, Insertable, QueryDsl, Queryable, Selectable,
     SelectableHelper,
@@ -30,7 +30,7 @@ pub struct UserPo<'a> {
     pub email: Cow<'a, str>,
     pub password: Cow<'a, str>,
     pub address: Option<Cow<'a, str>>,
-    pub last_login: NaiveDateTime,
+    pub last_login: LocalDataTime,
     pub online: bool,
 }
 

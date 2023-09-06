@@ -9,13 +9,13 @@ CREATE TABLE employees(
     -- 使用 argon2 处理后，长度固定为 97 字节，但有可能变更
     password CHAR(97) NOT NULL,
 
-    last_login TIMESTAMP NOT NULL DEFAULT NOW(),
+    last_login TIMESTAMPTz NOT NULL DEFAULT NOW(),
     
     invited_by BIGINT NOT NULL,
     role SMALLINT NOT NULL DEFAULT 0,
 
-    create_at TIMESTAMP NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMP NOT NULL DEFAULT NOW(),
+    create_at TIMESTAMPTz NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTz NOT NULL DEFAULT NOW(),
 
     PRIMARY KEY (id)
 );
