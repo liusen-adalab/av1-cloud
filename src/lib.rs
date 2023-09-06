@@ -107,23 +107,7 @@ pub async fn http_ping() -> &'static str {
 }
 
 pub async fn init_global() -> Result<()> {
-    let args: Vec<_> = std::env::args().collect();
-
-    let cfg_path = if args.len() > 1 {
-        // 在测试中，会默认传入多个参数
-        #[cfg(test)]
-        {
-            None
-        }
-        #[cfg(not(test))]
-        {
-            Some(&*args[1])
-        }
-    } else {
-        None
-    };
-
-    let settings = load_settings(cfg_path).context("load settings")?;
+    let settings = load_settings().context("load settings")?;
     logger::init(&settings.log)?;
 
     infrastructure::email::load_email_code_template().context("load email-code-template")?;
@@ -142,8 +126,9 @@ pub async fn init_global() -> Result<()> {
             .context("init redis pool")?;
     }
 
-    #[cfg(feature = "register_root")]
-    application::user::employee::register_root().await?;
+    if settings.init_system.register_root_user {
+        application::user::employee::register_root().await?;
+    }
 
     info!("global environment loaded");
     Ok(())

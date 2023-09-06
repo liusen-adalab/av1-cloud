@@ -75,8 +75,8 @@ pub async fn register_tx(
     biz_ok!((*employee.id(), *employee.role()))
 }
 
-#[cfg(feature = "register_root")]
 pub async fn register_root() -> anyhow::Result<()> {
+    tracing::info!("registering default admin accounts");
     use utils::db_pools::postgres::pg_conn;
     let conn = &mut pg_conn().await?;
 

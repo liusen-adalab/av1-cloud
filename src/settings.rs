@@ -1,6 +1,10 @@
-use std::sync::OnceLock;
+use std::{
+    path::{Path, PathBuf},
+    sync::OnceLock,
+};
 
 use anyhow::{Context, Result};
+use clap::Parser;
 use config::Config;
 use serde::{Deserialize, Serialize};
 
@@ -20,6 +24,13 @@ pub struct Settings {
     pub postgres: utils::db_pools::postgres::PgPoolConfig,
 
     pub email_code: EmailCodeCfg,
+
+    pub init_system: InitSystem,
+}
+
+#[derive(Deserialize, Debug, Serialize)]
+pub struct InitSystem {
+    pub register_root_user: bool,
 }
 
 #[derive(Deserialize, Debug)]
@@ -44,13 +55,49 @@ fn default_max_age() -> u32 {
 
 static SETTINGS: OnceLock<Settings> = OnceLock::new();
 
-pub fn load_settings(cfg_path: Option<&str>) -> Result<&'static Settings> {
-    println!("loading settings. path = {:?}", cfg_path);
-    let path = cfg_path.unwrap_or_default();
-    let settings: Settings = Config::builder()
-        .add_source(config::File::with_name("configs/default.toml").required(false))
-        .add_source(config::File::with_name(path).required(cfg_path.is_some()))
-        .add_source(config::Environment::with_prefix("AV1"))
+/// Simple program to greet a person
+#[derive(Parser, Debug)]
+#[command(author, version, about, long_about = None)]
+#[command(arg_required_else_help(false))]
+pub struct Args {
+    /// Config file path
+    #[arg(short, long)]
+    config: Option<PathBuf>,
+
+    /// Should register root user
+    #[arg(short, long)]
+    register_root_user: bool,
+}
+
+pub fn load_settings() -> Result<&'static Settings> {
+    let default = config::File::from(Path::new("./configs/default.toml")).required(false);
+    let mut builder = Config::builder().add_source(default);
+    builder = builder;
+
+    // 在测试中，会默认传入多个测试相关的参数，所以跳过解析
+    #[cfg(not(test))]
+    {
+        let args: Args = Args::parse();
+        if let Some(path) = args.config {
+            println!("loading settings. path = {:?}", path);
+            builder = builder.add_source(config::File::from(path).required(true));
+        }
+
+        #[derive(Debug, Serialize)]
+        struct CmdSettings {
+            init_system: InitSystem,
+        }
+
+        let c = CmdSettings {
+            init_system: InitSystem {
+                register_root_user: args.register_root_user,
+            },
+        };
+
+        builder = builder.add_source(Config::try_from(&c)?);
+    }
+
+    let settings: Settings = builder
         .build()
         .context("cannot load config")?
         .try_deserialize()
