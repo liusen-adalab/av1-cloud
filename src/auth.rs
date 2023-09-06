@@ -47,10 +47,6 @@ where
     forward_ready!(service);
 
     fn call(&self, req: ServiceRequest) -> Self::Future {
-        // let roles = ["user", "employee", "manager", "root"];
-        // let role = roles.choose(&mut rand::thread_rng()).unwrap();
-        // println!("role: {}", role);
-
         let session = req.get_session();
         let srv = Rc::clone(&self.service);
 
@@ -58,7 +54,6 @@ where
             let role = session
                 .get::<String>("role")?
                 .unwrap_or("anonymous".to_string());
-            println!("role: {}", role);
 
             let vals = CasbinVals {
                 subject: role,
