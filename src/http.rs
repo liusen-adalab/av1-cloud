@@ -1,6 +1,6 @@
 use std::fmt::{Debug, Display};
 
-use actix_session::SessionInsertError;
+use actix_session::{SessionGetError, SessionInsertError};
 use actix_web::{body::BoxBody, http::StatusCode, web::Json, HttpResponse, ResponseError};
 use serde::Serialize;
 
@@ -52,6 +52,7 @@ pub trait HttpBizError: Display + Debug + Send + Sync + 'static {
 impl HttpBizError for std::num::ParseIntError {}
 impl HttpBizError for anyhow::Error {}
 impl HttpBizError for SessionInsertError {}
+impl HttpBizError for SessionGetError {}
 
 impl<T> From<T> for ApiError
 where

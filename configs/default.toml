@@ -20,6 +20,9 @@ url = "postgresql://postgres:postgres@127.0.0.1:54333/av1-cloud"
 min_conn = 1
 max_conn = 20
 
+[file_system]
+root_dir = "C:/workspace/av1-cloud/dev-keydb/dev-fs-root"
+
 [email_code]
 from_full = "test <test@orientphoenix.com>"
 from_addr = "test@orientphoenix.com"

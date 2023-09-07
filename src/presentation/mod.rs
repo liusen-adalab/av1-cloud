@@ -1,6 +1,7 @@
 use serde::Serialize;
 
 pub mod employee;
+pub mod file_system;
 pub mod user;
 
 #[derive(Serialize)]

@@ -15,6 +15,7 @@ use settings::get_settings;
 use tracing::info;
 
 use crate::{
+    application::file_system,
     presentation::{employee, user},
     settings::load_settings,
 };
@@ -55,6 +56,7 @@ pub async fn build_http_server() -> Result<Server> {
             .configure(user::config)
             .configure(employee::config)
             .configure(cqrs::actix_config)
+            .configure(presentation::file_system::actix_config)
             .route("/ping", web::get().to(http_ping))
             .wrap(casbin_middleware.clone())
             .wrap(auth::RoleExtractor)
@@ -131,6 +133,8 @@ pub async fn init_global() -> Result<()> {
     if settings.init_system.register_root_user {
         application::user::employee::register_root().await?;
     }
+
+    file_system::init().await.context("init file-system")?;
 
     info!("global environment loaded");
     Ok(())

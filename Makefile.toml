@@ -92,6 +92,12 @@ script = '''
 /home/sen/.cargo/bin/diesel database reset
 '''
 
+[tasks.pg-add.windows]
+script_runner = "@shell"
+script = '''
+wsl /home/sen/.cargo/bin/diesel migration generate ${@}
+'''
+
 ##############################
 [tasks.d]
 alias = "deploy"

@@ -1,4 +1,5 @@
 pub mod email;
+pub mod file_system;
 pub mod user;
 
 #[macro_export]
