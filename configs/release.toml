@@ -24,6 +24,8 @@ url = "postgresql://postgres:password@10.0.10.3:30020/av1_cloud"
 min_conn = 1
 max_conn = 50
 
+[file_system]
+root_dir = "/storage/dev-av1_cloud-root"
 
 [email_code]
 from_full = "test <test@orientphoenix.com>"

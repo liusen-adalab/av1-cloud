@@ -154,6 +154,11 @@ pub async fn create_user_link(src: &Path, owner: &VirtualPath) -> Result<()> {
     debug!("creating user link");
 
     delete(&owner).await?;
+
+    #[cfg(target_family = "unix")]
+    fs::symlink(&src, owner).await?;
+
+    #[cfg(target_family = "windows")]
     fs::symlink_file(&src, owner).await?;
     Ok(())
 }
