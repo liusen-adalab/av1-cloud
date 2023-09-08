@@ -69,6 +69,11 @@ actix-casbin-auth = { git = "https://github.com/casbin-rs/actix-casbin-auth.git"
     "runtime-tokio",
 ] }
 clap = { version = "4.4.2", features = ["derive"] }
+tempfile = "3.8.0"
+regex = { version = "1.9.5", default-features = false, features = ["std"] }
+path-slash = "0.2.1"
+actix-multipart = "0.6.1"
+async-recursion = "1.0.5"
 
 [dev-dependencies]
 # 必须使用 rustls，因为 arch 系统的 openssl 产生了不兼容的更改

@@ -34,15 +34,6 @@ pub struct UserPo<'a> {
     pub online: bool,
 }
 
-#[must_use]
-pub struct EffectedRow(usize);
-
-impl EffectedRow {
-    pub fn actually_effected(&self) -> bool {
-        self.0 > 0
-    }
-}
-
 pub(crate) async fn save(user: &User, conn: &mut PgConn) -> Result<EffectedRow> {
     let user = UserPo::from_do(user);
 
@@ -96,6 +87,8 @@ pub enum UserFindId<'a> {
 }
 
 use diesel::result::OptionalExtension;
+
+use super::EffectedRow;
 
 fn registered_email_record_key() -> &'static str {
     "user:registerd_emails"

@@ -16,6 +16,43 @@ diesel::table! {
 }
 
 diesel::table! {
+    sys_files (id) {
+        id -> Int8,
+        hash -> Varchar,
+        path -> Varchar,
+        size -> Int8,
+        is_video -> Bool,
+        transcode_from -> Nullable<Int8>,
+        can_be_encode -> Nullable<Bool>,
+        slice_count -> Nullable<Int4>,
+        bit_rate -> Nullable<Int4>,
+        duration_ms -> Nullable<Int4>,
+        height -> Nullable<Int4>,
+        width -> Nullable<Int4>,
+        general_info -> Nullable<Text>,
+        video_info -> Nullable<Text>,
+        audio_info -> Nullable<Text>,
+        create_at -> Timestamp,
+        updated_at -> Timestamp,
+    }
+}
+
+diesel::table! {
+    user_files (id) {
+        id -> Int8,
+        sys_file_id -> Nullable<Int8>,
+        user_id -> Int8,
+        parent_id -> Nullable<Int8>,
+        at_dir -> Varchar,
+        file_name -> Varchar,
+        is_dir -> Bool,
+        deleted -> Bool,
+        create_at -> Timestamp,
+        updated_at -> Timestamp,
+    }
+}
+
+diesel::table! {
     users (id) {
         id -> Int8,
         name -> Varchar,
@@ -32,5 +69,7 @@ diesel::table! {
 
 diesel::allow_tables_to_appear_in_same_query!(
     employees,
+    sys_files,
+    user_files,
     users,
 );

@@ -8,7 +8,7 @@ use clap::Parser;
 use config::Config;
 use serde::{Deserialize, Serialize};
 
-use crate::infrastructure::email::EmailCodeCfg;
+use crate::{application::file_system::FileSystemCfg, infrastructure::email::EmailCodeCfg};
 
 #[derive(Deserialize, Debug)]
 pub struct Settings {
@@ -26,6 +26,8 @@ pub struct Settings {
     pub email_code: EmailCodeCfg,
 
     pub init_system: InitSystem,
+
+    pub file_system: FileSystemCfg,
 }
 
 #[derive(Deserialize, Debug, Serialize)]

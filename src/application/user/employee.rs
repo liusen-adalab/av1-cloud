@@ -67,9 +67,7 @@ pub async fn register_tx(
 
     // save
     ensure_biz!(
-        repo_employee::save(&employee, conn)
-            .await?
-            .actually_effected(),
+        repo_employee::save(&employee, conn).await?.is_effected(),
         RegisterErr::AlreadyRegistered
     );
     biz_ok!((*employee.id(), *employee.role()))

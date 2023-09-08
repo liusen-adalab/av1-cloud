@@ -35,7 +35,7 @@ pub async fn register_tx(user: User, conn: &mut PgConn) -> BizResult<UserId, Reg
     ensure_biz!(not repo_user::exist(user.email(), conn).await?, RegisterErr::AlreadyRegister);
     // 上一步检查有概率漏检，所以应该以最后一步写入结果为准
     ensure_biz!(
-        repo_user::save(&user, conn).await?.actually_effected(),
+        repo_user::save(&user, conn).await?.is_effected(),
         RegisterErr::AlreadyRegister
     );
     biz_ok!(*user.id())
