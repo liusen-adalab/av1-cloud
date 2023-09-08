@@ -36,3 +36,4 @@ g3, /admin/employee/logout, pub_endpoint
 # 可能需要细化这些接口的权限，目前先放开
 g3, /api/*, pub_endpoint
 g3, /ping, pub_endpoint
+g3, /*/doc, pub_endpoint
