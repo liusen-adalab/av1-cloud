@@ -132,7 +132,7 @@ impl Serialize for FlakeId {
 }
 
 #[derive(Deserialize, From, Debug, AsExpression, FromSqlRow)]
-#[diesel(sql_type = ::diesel::sql_types::Timestamp)]
+#[diesel(sql_type = ::diesel::sql_types::Timestamptz)]
 pub struct MillionTimestamp(chrono::DateTime<chrono::Local>);
 scalar!(MillionTimestamp);
 
@@ -177,49 +177,58 @@ impl<'a> From<&'a Address> for String {
 }
 
 mod diesel_impl {
-    use diesel::{
-        backend::Backend,
-        deserialize::{self, FromSql},
-        pg::Pg,
-        serialize::{self, Output, ToSql},
-    };
-
-    use super::MillionTimestamp;
-
+    #[macro_export]
     macro_rules! diesel_new_type {
         ($type:ty, $pg_type:ty) => {
-            impl ToSql<$pg_type, Pg> for $type {
-                fn to_sql<'b>(&'b self, out: &mut Output<'b, '_, Pg>) -> serialize::Result {
-                    ToSql::<$pg_type, Pg>::to_sql(&self.0, out)
+            const _: () = {
+                use diesel::{
+                    backend::Backend,
+                    deserialize::{self, FromSql},
+                    pg::Pg,
+                    serialize::{self, Output, ToSql},
+                };
+                impl ToSql<$pg_type, Pg> for $type {
+                    fn to_sql<'b>(&'b self, out: &mut Output<'b, '_, Pg>) -> serialize::Result {
+                        ToSql::<$pg_type, Pg>::to_sql(&self.0, out)
+                    }
                 }
-            }
 
-            impl FromSql<$pg_type, Pg> for $type {
-                fn from_sql(bytes: <Pg as Backend>::RawValue<'_>) -> deserialize::Result<Self> {
-                    let res = FromSql::<$pg_type, Pg>::from_sql(bytes)?;
-                    Ok(Self(res))
+                impl FromSql<$pg_type, Pg> for $type {
+                    fn from_sql(bytes: <Pg as Backend>::RawValue<'_>) -> deserialize::Result<Self> {
+                        let res = FromSql::<$pg_type, Pg>::from_sql(bytes)?;
+                        Ok(Self(res))
+                    }
                 }
-            }
+            };
         };
 
         ($type:ty, $pg_type:ty, map_to: $map_ty:ty) => {
-            impl ToSql<$pg_type, Pg> for $type {
-                fn to_sql<'b>(&'b self, out: &mut Output<'b, '_, Pg>) -> serialize::Result {
-                    let map_to = <$map_ty>::from(self);
-                    ToSql::<$pg_type, Pg>::to_sql(&map_to, &mut out.reborrow())
-                }
-            }
+            const _: () = {
+                use diesel::{
+                    backend::Backend,
+                    deserialize::{self, FromSql},
+                    pg::Pg,
+                    serialize::{self, Output, ToSql},
+                };
 
-            impl FromSql<$pg_type, Pg> for $type {
-                fn from_sql(bytes: <Pg as Backend>::RawValue<'_>) -> deserialize::Result<Self> {
-                    let res: $map_ty = FromSql::<$pg_type, Pg>::from_sql(bytes)?;
-                    Ok(Self::from(res))
+                impl ToSql<$pg_type, Pg> for $type {
+                    fn to_sql<'b>(&'b self, out: &mut Output<'b, '_, Pg>) -> serialize::Result {
+                        let map_to = <$map_ty>::from(self);
+                        ToSql::<$pg_type, Pg>::to_sql(&map_to, &mut out.reborrow())
+                    }
                 }
-            }
+
+                impl FromSql<$pg_type, Pg> for $type {
+                    fn from_sql(bytes: <Pg as Backend>::RawValue<'_>) -> deserialize::Result<Self> {
+                        let res: $map_ty = FromSql::<$pg_type, Pg>::from_sql(bytes)?;
+                        Ok(Self::from(res))
+                    }
+                }
+            };
         };
     }
 
-    diesel_new_type!(MillionTimestamp, diesel::pg::sql_types::Timestamptz);
+    diesel_new_type!(super::MillionTimestamp, diesel::pg::sql_types::Timestamptz);
     diesel_new_type!(super::FlakeId, diesel::sql_types::BigInt);
     diesel_new_type!(super::Address, diesel::sql_types::Text, map_to: String);
 }

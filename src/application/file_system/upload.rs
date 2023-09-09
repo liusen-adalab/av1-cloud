@@ -7,15 +7,18 @@ use serde_with::DisplayFromStr;
 use tracing::warn;
 use utils::db_pools::postgres::pg_conn;
 use utils::db_pools::postgres::PgConn;
+use utils::log_if_err;
 
-use crate::domain::file_system::service;
+use crate::domain::file_system::file::CreateChildErr;
+use crate::domain::file_system::file::FileNodeMetaData;
+use crate::domain::file_system::file::UserFileId;
+use crate::domain::file_system::service_upload;
 use crate::pg_tx;
 use crate::{
     biz_ok,
     domain::{
         file_system::{
-            file::{VirtualPath, VirtualPathErr},
-            service::{path_manager, PathManager},
+            service::path_manager,
             service_upload::{UploadTask, UploadTaskState},
         },
         user::user::UserId,
@@ -30,7 +33,7 @@ use crate::{
 
 #[derive(From, Debug)]
 pub enum RegisterUploadTaskErr {
-    PathNotAllow(VirtualPathErr),
+    Create(service_upload::CreateTaskErr),
     NoParent,
 }
 
@@ -49,7 +52,7 @@ pub struct RegisterUploadTaskResp {
 pub struct RegisterUploadTaskDto {
     hash: String,
     #[serde_as(as = "DisplayFromStr")]
-    parent_id: i64,
+    parent_id: UserFileId,
     file_name: String,
 }
 
@@ -58,26 +61,27 @@ pub async fn register_upload_task(
     user_id: UserId,
     task: RegisterUploadTaskDto,
 ) -> BizResult<RegisterUploadTaskResp, RegisterUploadTaskErr> {
+    use RegisterUploadTaskErr::*;
+
     let conn = &mut pg_conn().await?;
     // create task
     let parent = ensure_exist!(
-        repo_user_file::find_dir_shallow(task.parent_id, conn).await?,
-        RegisterUploadTaskErr::NoParent
+        repo_user_file::find_node(task.parent_id, conn).await?,
+        NoParent
     );
-    let path = parent.path().join(&task.file_name).to_str().into_owned();
-    let dst_path = ensure_biz!(VirtualPath::try_build(user_id, path));
-    let task = UploadTask::new(
-        user_id,
-        task.hash,
-        *parent.id(),
-        dst_path.file_name().to_string(),
-    );
+    ensure_biz!(*parent.user_id() == user_id, NoParent);
+
+    let task = ensure_biz!(service_upload::create_task(
+        &parent,
+        &task.file_name,
+        task.hash
+    ));
 
     let conn = &mut pg_conn().await?;
     // check hash
     let hash_existed = repo_user_file::exists(&**task.hash(), conn).await?;
     // check dst_path
-    let dst_path_existed = repo_user_file::exists(&dst_path, conn).await?;
+    let dst_path_existed = repo_user_file::exists(task.path(), conn).await?;
 
     // create slice dir
     let slice_dir = path_manager().upload_slice_dir(*task.id());
@@ -105,7 +109,7 @@ impl UploadTaskDto {
         Self {
             id: *task.id(),
             hash: task.hash().to_string(),
-            file_name: task.file_name().to_string(),
+            file_name: task.path().file_name().to_string(),
             uploaded_slices: task.uploaded_slices().clone(),
         }
     }
@@ -131,9 +135,8 @@ pub async fn clear_upload_tasks(tasks: Vec<i64>) -> anyhow::Result<()> {
             continue;
         };
         let slice_dir = path_manager().upload_slice_dir(*task.id());
-        file_sys::delete(&slice_dir).await?;
-
         repo_upload_task::delete(task_id).await?;
+        file_sys::delete(&slice_dir).await?;
     }
     Ok(())
 }
@@ -170,6 +173,7 @@ pub struct UploadedUserFile {
 pub enum FinishUploadTaskErr {
     HashNotMatch,
     SysBusy(tokio::time::error::Elapsed),
+    CreateFile(CreateChildErr),
     NoParent,
     NoSlice,
     NoTask,
@@ -183,77 +187,73 @@ pub async fn upload_finished_tx(
     task_id: i64,
     conn: &mut PgConn,
 ) -> BizResult<UploadedUserFile, FinishUploadTaskErr> {
+    use FinishUploadTaskErr::*;
     // TODO: get lock
 
-    let task = ensure_exist!(
-        repo_upload_task::find(task_id).await?,
-        FinishUploadTaskErr::NoTask
-    );
-
-    match task.state() {
-        UploadTaskState::Completed(file_id) => {
-            return biz_ok!(UploadedUserFile {
-                new_name: None,
-                file_id: file_id.to_string()
-            });
-        }
-        UploadTaskState::Pending => {
-            // do nothing and continue
-        }
+    // load & check task
+    let task = ensure_exist!(repo_upload_task::find(task_id).await?, NoTask);
+    if let UploadTaskState::Completed(file_id) = task.state() {
+        return biz_ok!(UploadedUserFile {
+            new_name: None,
+            file_id: file_id.to_string()
+        });
     }
 
-    dbg!(&task);
-    // check parent
-    let parent = ensure_exist!(
-        repo_user_file::find_dir_shallow(*task.parent_dir_id(), conn).await?,
-        FinishUploadTaskErr::NoParent
+    // load parent
+    let mut parent = ensure_exist!(
+        repo_user_file::load_tree(*task.parent_dir_id(), 2, conn).await?,
+        NoParent
     );
 
     // generate user file
-    let file_data = if let Some(file) = repo_user_file::get_file_data(task.hash()).await? {
-        file
-    } else {
-        // generate sys file
-        let slice_dir = path_manager().upload_slice_dir(*task.id());
-        let merged = ensure_exist!(
-            file_sys::merge_slices(&slice_dir).await?,
-            FinishUploadTaskErr::NoSlice
-        );
-        println!("hash = {}", merged.hash);
-        // check hash
-        ensure_biz!(
-            &merged.hash == task.hash(),
-            FinishUploadTaskErr::HashNotMatch
-        );
-        let file = PathManager::new_sys_file(merged.size, merged.hash.clone());
-        dbg!(file.path());
-        file_sys::create_dir_all(&file.path().parent().unwrap()).await?;
-        merged.persist(file.path()).await?;
-        file
-    };
-    let mut file = service::create_file(&parent, &task.file_name(), file_data);
+    let file_data = ensure_biz!(load_sys_file(&task).await?);
+    let file_data_path = file_data.archived_path().clone();
+    let file = ensure_biz!(parent.create_file(&task.path().file_name(), file_data));
 
-    // save user file
-    let mut new_name = None;
-    loop {
-        let effected = repo_user_file::save(&file, conn).await?;
-        if effected.is_effected() {
-            break;
-        }
-        file.increase_file_name();
-        new_name = Some(file.file_name().to_string());
-    }
+    let new_name = file.file_name() != task.path().file_name();
+    let new_name = new_name.then(|| file.file_name().to_string());
+    let _effected = repo_user_file::save_node(&file, conn).await?;
 
-    // clear
+    // 以下操作不能回滚，要注意顺序，以保证这个函数的幂等性
+
+    // 为用户创建文件软链接
+    file_sys::create_user_link(&file_data_path, file.path()).await?;
+
+    // 更新 task 状态，必须是最后一个可能失败的操作
     let mut task = task;
     task.finished(*file.id());
     repo_upload_task::update(&task).await?;
 
-    // do file-system stuff
-    // file_sys::create_user_link(file.file_data_path().unwrap(), file.path()).await?;
+    // 确保前面的操作都成功后，再执行清理操作
+    tokio::spawn(async move {
+        let slice_dir = path_manager().upload_slice_dir(*task.id());
+        log_if_err!(file_sys::delete(&slice_dir).await);
+    });
 
     biz_ok!(UploadedUserFile {
         new_name,
         file_id: file.id().to_string()
     })
+}
+
+async fn load_sys_file(task: &UploadTask) -> BizResult<FileNodeMetaData, FinishUploadTaskErr> {
+    use FinishUploadTaskErr::*;
+
+    if let Some(file) = repo_user_file::get_filenode_data(task.hash()).await? {
+        // founded in repository
+        biz_ok!(file)
+    } else {
+        // merge slices
+        let slice_dir = path_manager().upload_slice_dir(*task.id());
+        let merged = ensure_exist!(file_sys::merge_slices(&slice_dir).await?, NoSlice);
+        // check hash
+        ensure_biz!(&merged.hash == task.hash(), HashNotMatch);
+        // persist file
+        let path = path_manager().archived_path(&merged.hash);
+        let file = FileNodeMetaData::new(merged.size, merged.hash.clone(), path);
+        file_sys::create_dir_all(&file.archived_path().parent().unwrap()).await?;
+        merged.persist(file.archived_path()).await?;
+
+        biz_ok!(file)
+    }
 }

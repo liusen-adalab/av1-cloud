@@ -117,7 +117,7 @@ async fn load_slices_sorted(dir: &Path) -> Result<Vec<PathBuf>> {
 }
 
 pub async fn virtual_delete(path: &VirtualPath) -> Result<()> {
-    let path = PathManager::virtual_path_to_sys(path);
+    let path = PathManager::virtual_to_disk(path);
     delete(&path).await?;
     Ok(())
 }
@@ -150,7 +150,7 @@ pub async fn delete(path: &Path) -> Result<()> {
 }
 
 pub async fn create_user_link(src: &Path, owner: &VirtualPath) -> Result<()> {
-    let owner = PathManager::virtual_path_to_sys(owner);
+    let owner = PathManager::virtual_to_disk(owner);
     debug!("creating user link");
 
     delete(&owner).await?;
@@ -160,11 +160,12 @@ pub async fn create_user_link(src: &Path, owner: &VirtualPath) -> Result<()> {
 
     #[cfg(target_family = "windows")]
     fs::symlink_file(&src, owner).await?;
+
     Ok(())
 }
 
 pub(crate) async fn create_dir(dir: &VirtualPath) -> Result<()> {
-    let path = PathManager::virtual_path_to_sys(dir);
+    let path = PathManager::virtual_to_disk(dir);
     create_dir_all(&path).await?;
     Ok(())
 }

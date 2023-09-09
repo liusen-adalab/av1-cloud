@@ -23,7 +23,7 @@ pub(crate) async fn update(task: &UploadTask) -> Result<()> {
         // set ttl for task
         let conn = &mut redis_conn().await?;
         let key = task_key(*task.id());
-        conn.set_ex(&key, task, 60 * 60).await?;
+        conn.set_ex(&key, task, 60 * 10).await?;
     } else {
         save(task).await?;
     }

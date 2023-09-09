@@ -49,7 +49,10 @@ pub(crate) async fn save(user: &User, conn: &mut PgConn) -> Result<EffectedRow> 
         .sadd(registered_email_record_key(), user.email.as_ref())
         .await?;
 
-    Ok(EffectedRow(effected))
+    Ok(EffectedRow {
+        effected_row: effected,
+        expect_row: 1,
+    })
 }
 
 pub(crate) async fn update(user: &User, conn: &mut PgConn) -> Result<()> {

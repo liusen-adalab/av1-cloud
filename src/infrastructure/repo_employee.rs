@@ -101,7 +101,10 @@ pub(crate) async fn save(user: &Employee, conn: &mut PgConn) -> Result<EffectedR
         .execute(conn)
         .await?;
 
-    Ok(EffectedRow(effected))
+    Ok(EffectedRow {
+        expect_row: 1,
+        effected_row: effected,
+    })
 }
 
 pub(crate) async fn update(user: &Employee, conn: &mut PgConn) -> Result<()> {

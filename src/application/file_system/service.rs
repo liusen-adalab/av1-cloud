@@ -1,9 +1,9 @@
 use crate::{
     biz_ok,
     cqrs::user::UserId,
-    domain::file_system::{
-        file::{UserDir, UserFileId},
-        service::{self},
+    domain::{
+        self,
+        file_system::file::{FileNode, UserFileId, VirtualPath},
     },
     ensure_biz, ensure_exist,
     http::BizResult,
@@ -13,7 +13,7 @@ use crate::{
     },
     pg_tx,
 };
-use anyhow::{ensure, Result};
+use anyhow::{bail, ensure, Result};
 use derive_more::From;
 use serde::Serialize;
 use serde_with::serde_as;
@@ -25,36 +25,44 @@ use utils::db_pools::postgres::{pg_conn, PgConn};
 #[derive(Serialize)]
 pub struct DirTree {
     #[serde_as(as = "DisplayFromStr")]
-    pub id: i64,
+    pub id: UserFileId,
     pub name: String,
     pub children: Vec<DirTree>,
 }
 
 impl DirTree {
-    fn from_do(tree: &UserDir) -> Self {
-        let children = tree
-            .dirs()
-            .iter()
-            .map(|child| Self::from_do(child))
-            .collect();
-        Self {
+    fn from_do(tree: &FileNode) -> Result<Self> {
+        let children = if let Some(children) = tree.children() {
+            children
+                .iter()
+                .map(|c| Self::from_do(c))
+                .collect::<Result<_>>()?
+        } else {
+            bail!("tree has no children");
+        };
+
+        Ok(Self {
             id: *tree.id(),
-            name: tree.path().file_name().to_string(),
+            name: tree.file_name().to_string(),
             children,
-        }
+        })
     }
 }
 
 pub async fn load_home(user_id: UserId) -> Result<DirTree> {
-    let tree = repo_user_file::load_dir_struct(user_id).await?;
+    let root = VirtualPath::root(user_id);
+    let tree = repo_user_file::load_tree_struct(&root).await?;
+
     let tree = match tree {
         Some(tree) => tree,
         None => {
             debug!("create user home");
-            let tree = service::create_user_home(user_id).await?;
+            let tree = FileNode::user_home(user_id);
             let conn = &mut pg_conn().await?;
-            let effted = repo_user_file::save_tree(&tree, conn).await?.is_effected();
-            ensure!(effted, "save tree failed");
+            let all_effected = repo_user_file::save_node(&tree, conn)
+                .await?
+                .is_all_effected();
+            ensure!(all_effected, "save tree failed");
 
             for path in tree.all_paths() {
                 file_sys::create_dir(path).await?;
@@ -62,13 +70,14 @@ pub async fn load_home(user_id: UserId) -> Result<DirTree> {
             tree
         }
     };
-    Ok(DirTree::from_do(&tree))
+    Ok(DirTree::from_do(&tree)?)
 }
 
 #[derive(From)]
 pub enum CreateDirErr {
-    Create(service::CreateDirErr),
+    Create(domain::file_system::file::CreateChildErr),
     PathErr(crate::domain::file_system::file::VirtualPathErr),
+
     AlreadyExist,
     NoParent,
     NotAllowed,
@@ -88,18 +97,19 @@ pub async fn create_dir_tx(
     name: &str,
     conn: &mut PgConn,
 ) -> BizResult<UserFileId, CreateDirErr> {
-    let parent = ensure_exist!(
-        repo_user_file::find_dir_shallow(dir_id, conn).await?,
+    let mut parent = ensure_exist!(
+        repo_user_file::find_node(dir_id, conn).await?,
         CreateDirErr::NoParent
     );
     ensure_biz!(*parent.user_id() == user_id, CreateDirErr::NotAllowed);
-    let dir = ensure_biz!(service::create_dir(&parent, name));
+    let child = ensure_biz!(parent.create_dir(name));
+
     ensure_biz!(
-        repo_user_file::save_tree(&dir, conn).await?.is_effected(),
+        repo_user_file::save_node(child, conn).await?.is_effected(),
         CreateDirErr::AlreadyExist
     );
 
-    file_sys::create_dir(dir.path()).await?;
+    file_sys::create_dir(child.path()).await?;
 
-    biz_ok!(*dir.id())
+    biz_ok!(*child.id())
 }

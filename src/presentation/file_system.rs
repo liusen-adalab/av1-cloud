@@ -12,11 +12,12 @@ use serde_with::serde_as;
 use serde_with::DisplayFromStr;
 use utils::code;
 
+use crate::application::file_system::service::{self, CreateDirErr, DirTree};
 use crate::application::file_system::upload::{
     self, FinishUploadTaskErr, RegisterUploadTaskDto, RegisterUploadTaskErr,
     RegisterUploadTaskResp, StoreSliceErr, UploadTaskDto, UploadedUserFile,
 };
-use crate::application::file_system::user_file::{self, CreateDirErr, DirTree};
+use crate::domain::file_system::file::UserFileId;
 use crate::domain::user::user::UserId;
 use crate::http::{ApiError, ApiResponse};
 use crate::{http::JsonResponse, status_doc};
@@ -31,6 +32,13 @@ code! {
         too_long = "路径过长",
     }
 
+    pub CreatChildFile = 210 {
+        not_allowed = "不允许创建子文件",
+        bad_child_name = "子文件名不合法",
+        parent_not_dir = "父文件不是目录",
+        already_exist = "文件已存在",
+    }
+
     ---
 
     CreateDir {
@@ -38,10 +46,13 @@ code! {
         already_exist = "目录已存在，不允许重复创建",
         no_parent = "父目录不存在",
         parent_not_dir = "父级文件不是目录",
+        bad_file_name = "文件名不合法",
     }
 
     RegisterUploadTask {
         no_parent = "父目录不存在",
+        parent_not_dir = "父级文件不是目录",
+        bad_file_name = "文件名不合法",
     }
 
     UploadSlice {
@@ -73,8 +84,15 @@ macro_rules! path_format_err {
 impl From<RegisterUploadTaskErr> for ApiError {
     fn from(value: RegisterUploadTaskErr) -> Self {
         match value {
-            RegisterUploadTaskErr::PathNotAllow(p) => path_format_err!(p),
             RegisterUploadTaskErr::NoParent => REGISTER_UPLOAD_TASK.no_parent.into(),
+            RegisterUploadTaskErr::Create(c) => match c {
+                crate::domain::file_system::service_upload::CreateTaskErr::ParentNotDir => {
+                    REGISTER_UPLOAD_TASK.parent_not_dir.into()
+                }
+                crate::domain::file_system::service_upload::CreateTaskErr::BadFileName => {
+                    REGISTER_UPLOAD_TASK.bad_file_name.into()
+                }
+            },
         }
     }
 }
@@ -87,6 +105,19 @@ impl From<StoreSliceErr> for ApiError {
     }
 }
 
+macro_rules! create_child_err {
+    ($c:expr) => {{
+        match $c {
+            crate::domain::file_system::file::CreateChildErr::Path(p) => {
+                path_format_err!(p)
+            }
+            crate::domain::file_system::file::CreateChildErr::IAmNotDir => {
+                CREAT_CHILD_FILE.parent_not_dir.into()
+            }
+        }
+    }};
+}
+
 impl From<FinishUploadTaskErr> for ApiError {
     fn from(value: FinishUploadTaskErr) -> Self {
         match value {
@@ -95,6 +126,7 @@ impl From<FinishUploadTaskErr> for ApiError {
             FinishUploadTaskErr::SysBusy(_) => FINISH_UPLOAD.sys_busy.into(),
             FinishUploadTaskErr::NoParent => FINISH_UPLOAD.no_parent.into(),
             FinishUploadTaskErr::NoSlice => FINISH_UPLOAD.no_slice.into(),
+            FinishUploadTaskErr::CreateFile(c) => create_child_err!(c),
         }
     }
 }
@@ -103,14 +135,12 @@ impl From<CreateDirErr> for ApiError {
     fn from(value: CreateDirErr) -> Self {
         match value {
             CreateDirErr::PathErr(p) => path_format_err!(p),
-            CreateDirErr::Create(c) => match c {
-                crate::domain::file_system::service::CreateDirErr::NotAllowedPath => {
-                    CREATE_DIR.not_allowed.into()
-                }
-            },
             CreateDirErr::AlreadyExist => CREATE_DIR.already_exist.into(),
             CreateDirErr::NoParent => CREATE_DIR.no_parent.into(),
             CreateDirErr::NotAllowed => CREATE_DIR.not_allowed.into(),
+            CreateDirErr::Create(c) => {
+                create_child_err!(c)
+            }
         }
     }
 }
@@ -139,7 +169,7 @@ pub fn actix_config(cfg: &mut web::ServiceConfig) {
 
 async fn load_home(id: Identity) -> JsonResponse<DirTree> {
     let id = id.id()?.parse::<UserId>()?;
-    let tree = user_file::load_home(id).await?;
+    let tree = service::load_home(id).await?;
     ApiResponse::Ok(tree)
 }
 
@@ -148,7 +178,7 @@ async fn load_home(id: Identity) -> JsonResponse<DirTree> {
 #[serde(rename_all = "camelCase")]
 struct CreateDirDto {
     #[serde_as(as = "DisplayFromStr")]
-    pub parent_id: i64,
+    pub parent_id: UserFileId,
     pub name: String,
 }
 
@@ -156,13 +186,13 @@ struct CreateDirDto {
 #[derive(Serialize)]
 struct CreateDirResp {
     #[serde_as(as = "DisplayFromStr")]
-    pub file_id: i64,
+    pub file_id: UserFileId,
 }
 
 async fn create_dir(id: Identity, params: Json<CreateDirDto>) -> JsonResponse<CreateDirResp> {
     let id = id.id()?.parse::<UserId>()?;
     let CreateDirDto { parent_id, name } = params.into_inner();
-    let file_id = user_file::create_dir(id, parent_id, &name).await??;
+    let file_id = service::create_dir(id, parent_id, &name).await??;
     ApiResponse::Ok(CreateDirResp { file_id })
 }
 
