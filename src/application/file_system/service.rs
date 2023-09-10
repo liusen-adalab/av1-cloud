@@ -1,9 +1,9 @@
 use crate::{
     biz_ok,
-    cqrs::user::UserId,
     domain::{
         self,
         file_system::file::{FileNode, UserFileId, VirtualPath},
+        user::user::UserId,
     },
     ensure_biz, ensure_exist,
     http::BizResult,
@@ -16,15 +16,11 @@ use crate::{
 use anyhow::{bail, ensure, Result};
 use derive_more::From;
 use serde::Serialize;
-use serde_with::serde_as;
-use serde_with::DisplayFromStr;
 use tracing::debug;
 use utils::db_pools::postgres::{pg_conn, PgConn};
 
-#[serde_as]
 #[derive(Serialize)]
 pub struct DirTree {
-    #[serde_as(as = "DisplayFromStr")]
     pub id: UserFileId,
     pub name: String,
     pub children: Vec<DirTree>,

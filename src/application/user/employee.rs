@@ -82,7 +82,7 @@ pub async fn register_root() -> anyhow::Result<()> {
     let password = Password::try_from_async("12341234".to_string())
         .await
         .unwrap();
-    let mut root = Employee::create(email, password, 0);
+    let mut root = Employee::create(email, password, EmployeeId(0));
     root.set_role(crate::domain::user::employee::Role::Root);
     let _ = repo_employee::save(&root, conn).await?;
     let root_id = *repo_employee::find(root.email(), conn).await?.unwrap().id();

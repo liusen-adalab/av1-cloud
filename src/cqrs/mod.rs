@@ -115,21 +115,9 @@ async fn playgroud_dev() -> actix_web::Result<HttpResponse> {
 
 use derive_more::From;
 
-use self::user::{User, UserId, UserList, UserSearchParams};
+use crate::domain::user::user::UserId;
 
-#[derive(Deserialize, From, Debug, AsExpression, FromSqlRow)]
-#[diesel(sql_type = ::diesel::sql_types::BigInt)]
-pub struct FlakeId(i64);
-scalar!(FlakeId);
-
-impl Serialize for FlakeId {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        serializer.serialize_str(&self.0.to_string())
-    }
-}
+use self::user::{User, UserList, UserSearchParams};
 
 #[derive(Deserialize, From, Debug, AsExpression, FromSqlRow)]
 #[diesel(sql_type = ::diesel::sql_types::Timestamptz)]
@@ -229,6 +217,5 @@ mod diesel_impl {
     }
 
     diesel_new_type!(super::MillionTimestamp, diesel::pg::sql_types::Timestamptz);
-    diesel_new_type!(super::FlakeId, diesel::sql_types::BigInt);
     diesel_new_type!(super::Address, diesel::sql_types::Text, map_to: String);
 }

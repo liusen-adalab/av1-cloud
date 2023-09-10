@@ -8,8 +8,6 @@ use actix_session::SessionExt;
 use actix_web::web::{self, Json};
 use actix_web::HttpRequest;
 use serde::{Deserialize, Serialize};
-use serde_with::serde_as;
-use serde_with::DisplayFromStr;
 use utils::code;
 
 use crate::application::file_system::service::{self, CreateDirErr, DirTree};
@@ -18,6 +16,7 @@ use crate::application::file_system::upload::{
     RegisterUploadTaskResp, StoreSliceErr, UploadTaskDto, UploadedUserFile,
 };
 use crate::domain::file_system::file::UserFileId;
+use crate::domain::file_system::service_upload::UploadTaskId;
 use crate::domain::user::user::UserId;
 use crate::http::{ApiError, ApiResponse};
 use crate::{http::JsonResponse, status_doc};
@@ -173,19 +172,15 @@ async fn load_home(id: Identity) -> JsonResponse<DirTree> {
     ApiResponse::Ok(tree)
 }
 
-#[serde_as]
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct CreateDirDto {
-    #[serde_as(as = "DisplayFromStr")]
     pub parent_id: UserFileId,
     pub name: String,
 }
 
-#[serde_as]
 #[derive(Serialize)]
 struct CreateDirResp {
-    #[serde_as(as = "DisplayFromStr")]
     pub file_id: UserFileId,
 }
 
@@ -206,7 +201,7 @@ async fn register_upload_task(
     let id = identity.id()?.parse::<UserId>()?;
     let resp = upload::register_upload_task(id, params.into_inner()).await??;
     let ss = req.get_session();
-    let tasks: Option<HashSet<i64>> = ss.get(UPLOAD_TASKS)?;
+    let tasks: Option<HashSet<UploadTaskId>> = ss.get(UPLOAD_TASKS)?;
     let mut tasks = tasks.unwrap_or_default();
     tasks.insert(resp.task_id);
     ss.insert(UPLOAD_TASKS, tasks)?;
@@ -215,7 +210,7 @@ async fn register_upload_task(
 
 async fn get_upload_task(_id: Identity, req: HttpRequest) -> JsonResponse<Vec<UploadTaskDto>> {
     let ss = req.get_session();
-    let tasks: Option<HashSet<i64>> = ss.get(UPLOAD_TASKS)?;
+    let tasks: Option<HashSet<UploadTaskId>> = ss.get(UPLOAD_TASKS)?;
     let Some(tasks) = tasks else {
         return ApiResponse::Ok(Default::default());
     };
@@ -240,12 +235,10 @@ pub async fn upload_slice(
     ApiResponse::Ok(())
 }
 
-#[serde_as]
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct UploadFinishedParam {
-    #[serde_as(as = "DisplayFromStr")]
-    task_id: i64,
+    task_id: UploadTaskId,
 }
 
 async fn upload_finished(

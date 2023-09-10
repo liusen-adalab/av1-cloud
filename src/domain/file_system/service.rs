@@ -4,7 +4,7 @@ use anyhow::ensure;
 
 use crate::domain::user::user::UserId;
 
-use super::file::VirtualPath;
+use super::{file::VirtualPath, service_upload::UploadTaskId};
 
 pub struct PathManager {
     #[allow(dead_code)]
@@ -40,7 +40,7 @@ impl PathManager {
         self.user_space.join(user_id.to_string())
     }
 
-    pub fn upload_slice_dir(&self, task_id: i64) -> PathBuf {
+    pub fn upload_slice_dir(&self, task_id: UploadTaskId) -> PathBuf {
         self.uploading_dir.join(task_id.to_string())
     }
 

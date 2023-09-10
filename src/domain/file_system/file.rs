@@ -296,11 +296,13 @@ impl VirtualPath {
 impl VirtualPath {
     // 只能创建 "/源视频" 或 "/已转码视频" 的子路径
     // 如："/源视频/aa" 是合法的，而 "/源视频" 无法通过这个方法创建
-    pub fn build<P>(user_id: UserId, path: P) -> Result<Self, VirtualPathErr>
+    pub fn build<Id, P>(user_id: Id, path: P) -> Result<Self, VirtualPathErr>
     where
         P: AsRef<Path>,
+        UserId: From<Id>,
     {
         use VirtualPathErr::*;
+        let user_id = UserId::from(user_id);
 
         let path = path.as_ref();
 
@@ -407,7 +409,7 @@ impl VirtualPath {
         self.path.to_slash_lossy()
     }
 
-    pub fn user_id(&self) -> i64 {
+    pub fn user_id(&self) -> UserId {
         self.user_id
     }
 
@@ -595,7 +597,7 @@ mod test {
 
     #[test]
     fn t_allow_modify() {
-        let root = VirtualPath::root(1);
+        let root = VirtualPath::root(1.into());
         assert!(!root.allow_modified());
 
         let illegal_path = root.join_child("a");
@@ -635,7 +637,7 @@ mod test {
     fn t_create_child() {
         use super::CreateChildErr::*;
 
-        let mut home = FileNode::user_home(1);
+        let mut home = FileNode::user_home(1.into());
         assert_eq!(
             home.create_dir("aa").unwrap_err(),
             CreateChildErr::Path(VirtualPathErr::NotAllowed)
@@ -675,7 +677,7 @@ mod test {
     fn t_to_disk_path() {
         let user_root = Path::new("/storage/user-space/1");
 
-        let mut home = FileNode::user_home(1);
+        let mut home = FileNode::user_home(1.into());
         let resource = home.children_mut().unwrap().get_mut(0).unwrap();
         let res_path = resource.path.to_disk_path(user_root);
         assert_eq!(res_path, user_root.join("源视频"));

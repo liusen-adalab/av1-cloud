@@ -1,8 +1,12 @@
 use std::borrow::Cow;
 
 use crate::{
-    domain::file_system::file::{
-        convert::FileNodeConverter, FileNode, FileNodeMetaData, SysFileId, UserFileId, VirtualPath,
+    domain::{
+        file_system::file::{
+            convert::FileNodeConverter, FileNode, FileNodeMetaData, SysFileId, UserFileId,
+            VirtualPath,
+        },
+        user::user::UserId,
     },
     pg_exist,
     schema::{sys_files, user_files},
@@ -27,7 +31,7 @@ diesel::joinable!(user_files -> sys_files (sys_file_id));
 pub struct UserFilePo<'a> {
     pub id: UserFileId,
     pub sys_file_id: Option<SysFileId>,
-    pub user_id: i64,
+    pub user_id: UserId,
     pub parent_id: Option<UserFileId>,
     pub at_dir: Cow<'a, str>,
     pub file_name: Cow<'a, str>,

@@ -1,15 +1,17 @@
 use std::collections::HashSet;
 
 use super::file::{FileNode, UserFileId, VirtualPath};
-use crate::{domain::user::user::UserId, ensure_ok, flake_id_func};
+use crate::{domain::user::user::UserId, ensure_ok, id_wraper};
 
 use getset::Getters;
 use serde::{Deserialize, Serialize};
 
+id_wraper!(UploadTaskId);
+
 #[derive(Serialize, Deserialize, Getters, Debug)]
 #[getset(get = "pub(crate)")]
 pub struct UploadTask {
-    id: i64,
+    id: UploadTaskId,
     user_id: UserId,
     hash: String,
     parent_dir_id: UserFileId,
@@ -25,11 +27,9 @@ pub enum UploadTaskState {
 }
 
 impl UploadTask {
-    flake_id_func!();
-
     pub fn new(user_id: UserId, hash: String, parent_dir: UserFileId, path: VirtualPath) -> Self {
         Self {
-            id: Self::next_id(),
+            id: UploadTaskId::next_id(),
             user_id,
             hash,
             parent_dir_id: parent_dir,

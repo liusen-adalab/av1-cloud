@@ -24,7 +24,7 @@ use utils::db_pools::postgres::PgConn;
 )]
 #[diesel(table_name = users)]
 pub struct UserPo<'a> {
-    pub id: i64,
+    pub id: UserId,
     pub name: Cow<'a, str>,
     pub mobile_number: Option<Cow<'a, str>>,
     pub email: Cow<'a, str>,
@@ -70,7 +70,7 @@ pub(crate) async fn update(user: &User, conn: &mut PgConn) -> Result<()> {
 impl<'a> UserPo<'a> {
     fn from_do(user: &'a User) -> Self {
         Self {
-            id: *user.id() as i64,
+            id: *user.id(),
             name: Cow::Borrowed(&user.name()),
             mobile_number: user.mobile_number().as_ref().map(|p| Cow::Borrowed(&***p)),
             email: Cow::Borrowed(&user.email()),

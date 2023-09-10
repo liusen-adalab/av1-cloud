@@ -10,15 +10,17 @@ use utils::db_pools::postgres::pg_conn;
 
 use crate::schema::users;
 
-use super::{FlakeId, MillionTimestamp, Paginate};
+use super::{MillionTimestamp, Paginate};
 
-pub type UserId = i64;
+use crate::domain::user::user::UserId;
+
+async_graphql::scalar!(UserId);
 
 #[derive(Queryable, Selectable, SimpleObject)]
 #[graphql(complex)]
 /// 用户节点
 pub struct User {
-    pub id: FlakeId,
+    pub id: UserId,
     /// 用户名
     pub name: String,
     /// 手机号

@@ -2,8 +2,6 @@ use std::collections::HashSet;
 
 use derive_more::From;
 use serde::{Deserialize, Serialize};
-use serde_with::serde_as;
-use serde_with::DisplayFromStr;
 use tracing::warn;
 use utils::db_pools::postgres::pg_conn;
 use utils::db_pools::postgres::PgConn;
@@ -13,6 +11,7 @@ use crate::domain::file_system::file::CreateChildErr;
 use crate::domain::file_system::file::FileNodeMetaData;
 use crate::domain::file_system::file::UserFileId;
 use crate::domain::file_system::service_upload;
+use crate::domain::file_system::service_upload::UploadTaskId;
 use crate::pg_tx;
 use crate::{
     biz_ok,
@@ -37,21 +36,17 @@ pub enum RegisterUploadTaskErr {
     NoParent,
 }
 
-#[serde_as]
 #[derive(Serialize)]
 pub struct RegisterUploadTaskResp {
-    #[serde_as(as = "DisplayFromStr")]
-    pub task_id: i64,
+    pub task_id: UploadTaskId,
     pub hash_existed: bool,
     pub dst_path_existed: bool,
 }
 
-#[serde_as]
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RegisterUploadTaskDto {
     hash: String,
-    #[serde_as(as = "DisplayFromStr")]
     parent_id: UserFileId,
     file_name: String,
 }
@@ -98,7 +93,7 @@ pub async fn register_upload_task(
 
 #[derive(Serialize)]
 pub struct UploadTaskDto {
-    id: i64,
+    id: UploadTaskId,
     hash: String,
     file_name: String,
     uploaded_slices: HashSet<u32>,
@@ -115,11 +110,11 @@ impl UploadTaskDto {
     }
 }
 
-pub async fn get_upload_tasks(tasks: HashSet<i64>) -> anyhow::Result<Vec<UploadTaskDto>> {
+pub async fn get_upload_tasks(tasks: HashSet<UploadTaskId>) -> anyhow::Result<Vec<UploadTaskDto>> {
     let mut task_dto_s = vec![];
     for task_id in tasks {
         let Some(task) = repo_upload_task::find(task_id).await? else {
-            warn!(task_id, "upload task not found");
+            warn!(%task_id, "upload task not found");
             continue;
         };
         let dto = UploadTaskDto::new(&task);
@@ -128,10 +123,10 @@ pub async fn get_upload_tasks(tasks: HashSet<i64>) -> anyhow::Result<Vec<UploadT
     Ok(task_dto_s)
 }
 
-pub async fn clear_upload_tasks(tasks: Vec<i64>) -> anyhow::Result<()> {
+pub async fn clear_upload_tasks(tasks: Vec<UploadTaskId>) -> anyhow::Result<()> {
     for task_id in tasks {
         let Some(task) = repo_upload_task::find(task_id).await? else {
-            warn!(task_id, "upload task not found");
+            warn!(%task_id, "upload task not found");
             continue;
         };
         let slice_dir = path_manager().upload_slice_dir(*task.id());
@@ -145,7 +140,11 @@ pub enum StoreSliceErr {
     NoTask,
 }
 
-pub async fn store_slice(task_id: i64, index: u32, data: &[u8]) -> BizResult<(), StoreSliceErr> {
+pub async fn store_slice(
+    task_id: UploadTaskId,
+    index: u32,
+    data: &[u8],
+) -> BizResult<(), StoreSliceErr> {
     let mut task = ensure_exist!(
         repo_upload_task::find(task_id).await?,
         StoreSliceErr::NoTask
@@ -179,12 +178,14 @@ pub enum FinishUploadTaskErr {
     NoTask,
 }
 
-pub async fn upload_finished(task_id: i64) -> BizResult<UploadedUserFile, FinishUploadTaskErr> {
+pub async fn upload_finished(
+    task_id: UploadTaskId,
+) -> BizResult<UploadedUserFile, FinishUploadTaskErr> {
     pg_tx!(upload_finished_tx, task_id)
 }
 
 pub async fn upload_finished_tx(
-    task_id: i64,
+    task_id: UploadTaskId,
     conn: &mut PgConn,
 ) -> BizResult<UploadedUserFile, FinishUploadTaskErr> {
     use FinishUploadTaskErr::*;

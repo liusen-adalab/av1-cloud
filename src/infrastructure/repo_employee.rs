@@ -1,6 +1,5 @@
 use std::borrow::Cow;
 
-use crate::domain::user::user::UserId;
 use crate::redis_conn_switch::redis_conn;
 use crate::{
     domain::user::{
@@ -30,20 +29,20 @@ use super::EffectedRow;
 )]
 #[diesel(table_name = employees)]
 pub struct EmployeePo<'a> {
-    pub id: i64,
+    pub id: EmployeeId,
     pub name: Cow<'a, str>,
     pub mobile_number: Option<Cow<'a, str>>,
     pub email: Cow<'a, str>,
     pub password: Cow<'a, str>,
     pub last_login: NaiveDateTime,
-    pub invited_by: i64,
+    pub invited_by: EmployeeId,
     pub role: i16,
 }
 
 impl<'a> EmployeePo<'a> {
     fn from_do(user: &'a Employee) -> Self {
         Self {
-            id: *user.id() as i64,
+            id: *user.id(),
             name: Cow::Borrowed(&user.name()),
             mobile_number: user.mobile_number().as_ref().map(|p| Cow::Borrowed(&***p)),
             email: Cow::Borrowed(&user.email()),
@@ -121,7 +120,7 @@ fn invite_code_key() -> String {
     format!("inter_user:invite_code")
 }
 
-pub(crate) async fn save_invite_code(invitor: UserId, invite_code: &InviteCode) -> Result<()> {
+pub(crate) async fn save_invite_code(invitor: EmployeeId, invite_code: &InviteCode) -> Result<()> {
     let conn = &mut redis_conn().await?;
     conn.hset(invite_code_key(), invite_code.as_str(), invitor)
         .await?;
