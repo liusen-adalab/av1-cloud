@@ -17,7 +17,7 @@ id_wraper!(UserFileId);
 id_wraper!(SysFileId);
 
 /// 用户文件
-#[derive(Getters, Debug)]
+#[derive(Getters, Debug, Clone)]
 #[getset(get = "pub(crate)")]
 pub struct FileNode {
     id: UserFileId,
@@ -28,7 +28,7 @@ pub struct FileNode {
     file_type: FileType,
 }
 
-#[derive(IsVariant, Debug)]
+#[derive(IsVariant, Debug, Clone)]
 pub enum FileType {
     File(FileNodeMetaData),
     Dir(Vec<FileNode>),
@@ -74,6 +74,21 @@ impl FileNodeMetaData {
 pub enum CreateChildErr {
     Path(VirtualPathErr),
     IAmNotDir,
+    AlreadyExist,
+}
+
+#[derive(From, Debug, PartialEq, Eq)]
+pub enum MoveFileErr {
+    Path(VirtualPathErr),
+    ParentNotDir,
+    AlreadyExist,
+}
+
+#[derive(From, Debug, PartialEq, Eq)]
+pub enum RenameFileErr {
+    Path(VirtualPathErr),
+    ParentNotDir,
+    AlreadyExist,
 }
 
 impl FileNode {
@@ -174,22 +189,66 @@ impl FileNode {
         paths
     }
 
-    pub fn rename(&mut self, new_name: VirtualPath) {
-        self.path = new_name;
-        if let FileType::Dir(dir) = &mut self.file_type {
-            for node in dir {
-                node.set_parent(&self.path);
-            }
-        }
+    pub fn copy_to<'a>(&self, new_parent: &'a mut Self) -> Result<&'a mut Self, MoveFileErr> {
+        let copyed = self.copy(new_parent.id);
+        let copyed = copyed.move_to(new_parent)?;
+        Ok(copyed)
     }
 
-    fn set_parent(&mut self, parent_path: &VirtualPath) {
-        self.path = parent_path.join_child(self.file_name()).unwrap();
-        if let FileType::Dir(dir) = &mut self.file_type {
+    fn copy(&self, parent_id: UserFileId) -> Self {
+        let mut copyed = self.clone();
+        copyed.id = UserFileId::next_id();
+        copyed.parent_id = Some(parent_id);
+
+        if let FileType::Dir(dir) = &mut copyed.file_type {
             for node in dir {
-                node.set_parent(&self.path);
+                node.copy(copyed.id);
             }
         }
+
+        copyed
+    }
+
+    pub fn move_to<'a>(mut self, new_parent: &'a mut Self) -> Result<&'a mut Self, MoveFileErr> {
+        use MoveFileErr::*;
+        let FileType::Dir(children) = &mut new_parent.file_type else {
+            return Err(ParentNotDir);
+        };
+        let new_path = new_parent.path.join_child(self.file_name())?;
+        let existed = children.iter().any(|ch| ch.path == new_path);
+        ensure_ok!(!existed, AlreadyExist);
+
+        self.move_inner(new_path)?;
+
+        self.parent_id = Some(new_parent.id);
+        children.push(self);
+        Ok(children.last_mut().unwrap())
+    }
+
+    pub fn rename_child(&self, child: &mut FileNode, new_name: &str) -> Result<(), RenameFileErr> {
+        use RenameFileErr::*;
+        let FileType::Dir(children) = &self.file_type else {
+            return Err(RenameFileErr::ParentNotDir);
+        };
+
+        let new_path = child.path.rename(new_name)?;
+        let existed = children.iter().any(|ch| ch.path == new_path);
+        ensure_ok!(!existed, AlreadyExist);
+
+        child.move_inner(new_path)?;
+
+        Ok(())
+    }
+
+    fn move_inner(&mut self, new_path: VirtualPath) -> Result<(), VirtualPathErr> {
+        self.path = new_path;
+        if let FileType::Dir(dir) = &mut self.file_type {
+            for node in dir {
+                let new_path = self.path.join_child(node.file_name())?;
+                node.move_inner(new_path)?;
+            }
+        }
+        Ok(())
     }
 
     pub fn delete(&mut self) -> Result<(), FileDeleteErr> {
@@ -231,9 +290,16 @@ impl FileNode {
 #[derive(Debug)]
 pub struct NotAllowedIncreaseFileName;
 
+#[derive(PartialEq, Eq, Debug)]
 pub enum FileDeleteErr {
     NotAllowed,
     AlreadyDeleted,
+}
+
+#[derive(Debug, From)]
+pub enum RenameErr {
+    Path(VirtualPathErr),
+    AlreadyExist,
 }
 
 pub enum AddNodeErr {
@@ -304,9 +370,10 @@ impl VirtualPath {
         use VirtualPathErr::*;
         let user_id = UserId::from(user_id);
 
-        let path = path.as_ref();
+        let path = path.as_ref().to_slash_lossy();
+        let path = clean_path::clean(&*path);
 
-        ensure_ok!(!Self::is_fix_path(path), NotAllowed);
+        ensure_ok!(!Self::is_fix_path(&path), NotAllowed);
 
         let decendant_of_source = path.starts_with(Self::SOURCE_DIR_PATH);
         let decendant_of_encoded = path.starts_with(Self::ENCODED_DIR_PATH);
@@ -393,8 +460,11 @@ impl VirtualPath {
             .unwrap()
     }
 
-    pub fn rename(&mut self, new_name: &str) {
-        self.path.set_file_name(new_name);
+    pub fn rename(&self, new_name: &str) -> Result<Self, VirtualPathErr> {
+        let mut path = self.path.clone();
+        path.set_file_name(new_name);
+
+        Self::build(self.user_id, path)
     }
 
     pub fn parent_str(&self) -> Cow<str> {
@@ -402,7 +472,7 @@ impl VirtualPath {
             return Cow::Borrowed("");
         };
 
-        Cow::Owned(parent.to_string_lossy().to_string())
+        parent.to_slash_lossy()
     }
 
     pub fn to_str(&self) -> Cow<str> {
@@ -564,7 +634,10 @@ mod test {
 
     #[test]
     fn test_increase_file_name() {
-        let path = VirtualPath::build(1, "/源视频").unwrap();
+        let root = VirtualPath::root(1.into());
+        assert!(root.increase_file_name().is_none());
+
+        let path = VirtualPath::build_permissive(1.into(), "/源视频").unwrap();
         assert!(path.increase_file_name().is_none());
 
         let path = VirtualPath::build(1, "/源视频/aa").unwrap();
@@ -603,34 +676,22 @@ mod test {
         let illegal_path = root.join_child("a");
         assert!(illegal_path.is_err());
 
-        let path = root.join_child("已转码视频").unwrap();
-        assert!(!path.allow_modified());
+        assert_eq!(
+            root.join_child("/源视频").unwrap_err(),
+            VirtualPathErr::NotAllowed
+        );
+        assert_eq!(
+            root.join_child("已转码视频").unwrap_err(),
+            VirtualPathErr::NotAllowed
+        );
+        assert_eq!(
+            root.join_child("aa").unwrap_err(),
+            VirtualPathErr::NotAllowed
+        );
 
-        let path = root
-            .join_child("已转码视频")
-            .unwrap()
-            .join_child("a.mp4")
-            .unwrap();
-        assert!(path.allow_modified());
-
-        let path = root
-            .join_child("已转码视频")
-            .unwrap()
-            .join_child("a.mp4")
-            .unwrap()
-            .join_child("b.mp4")
-            .unwrap();
-        assert!(path.allow_modified());
-
-        let path = root.join_child("源视频").unwrap();
-        assert!(!path.allow_modified());
-
-        let path = root
-            .join_child("源视频")
-            .unwrap()
-            .join_child("a.mp4")
-            .unwrap();
-        assert!(path.allow_modified());
+        let resource = VirtualPath::build_permissive(1.into(), "/源视频").unwrap();
+        let aabb = resource.join_child("aa").unwrap().join_child("bb").unwrap();
+        assert!(aabb.allow_modified());
     }
 
     #[test]
@@ -687,5 +748,82 @@ mod test {
         let name = resource.children_mut().unwrap().get_mut(0).unwrap();
         let path = name.path.to_disk_path(user_root);
         assert_eq!(path, res_path.join("name"));
+    }
+
+    #[test]
+    fn t_rename() {
+        let home = &mut FileNode::user_home(1.into());
+        let (aa, _bb) = test_user_home(home);
+        let mut aa = aa.clone();
+        aa.create_dir("bb").unwrap();
+
+        let resource = home.children().unwrap().get(0).unwrap();
+        resource.rename_child(&mut aa, "cc").unwrap();
+
+        let aabb = aa.children().unwrap().get(0).unwrap();
+        assert_eq!(aa.path().to_str(), "/源视频/cc");
+        assert_eq!(aabb.path().to_str(), "/源视频/cc/bb");
+        assert_eq!(aa.id, aabb.parent_id.unwrap());
+    }
+
+    #[test]
+    fn t_copy() {
+        let mut home = FileNode::user_home(1.into());
+        let resource = home.children_mut().unwrap().get_mut(0).unwrap();
+
+        resource.create_dir("aa").unwrap();
+        resource.create_dir("bb").unwrap();
+
+        let ([aa], [bb]) = resource.children_mut().unwrap().split_at_mut(1) else {
+            panic!()
+        };
+
+        let aacc = aa.create_dir("cc").unwrap();
+        let bbcc = aacc.copy_to(bb).unwrap();
+        assert_eq!(bbcc.path().to_str(), "/源视频/bb/cc");
+
+        assert_eq!(bbcc.copy_to(aa).unwrap_err(), MoveFileErr::AlreadyExist);
+
+        let bbccaa = aa.copy_to(bbcc).unwrap();
+        assert_eq!(bbccaa.path().to_str(), "/源视频/bb/cc/aa");
+    }
+
+    // /
+    // └── 源视频
+    // |    ├── aa
+    // |    └── bb
+    // ├── 已转码视频
+    //
+    // return (aa, bb)
+    fn test_user_home(home: &mut FileNode) -> (&mut FileNode, &mut FileNode) {
+        let resource = home.children_mut().unwrap().get_mut(0).unwrap();
+        resource.create_dir("aa").unwrap();
+        resource.create_dir("bb").unwrap();
+
+        let ([aa], [bb]) = resource.children_mut().unwrap().split_at_mut(1) else {
+            panic!()
+        };
+        (aa, bb)
+    }
+
+    #[test]
+    fn t_delete() {
+        use FileDeleteErr::*;
+        let mut home = FileNode::user_home(1.into());
+        assert_eq!(home.delete().unwrap_err(), NotAllowed);
+
+        let (aa, bb) = test_user_home(&mut home);
+
+        aa.create_dir("cc").unwrap();
+        aa.delete().unwrap();
+        assert!(aa.deleted);
+        assert_eq!(aa.path().to_str(), "/deleted/源视频/aa");
+        let aacc = aa.children_mut().unwrap().get_mut(0).unwrap();
+        assert!(aacc.deleted);
+        assert_eq!(aacc.path().to_str(), "/deleted/源视频/aa/cc");
+
+        bb.delete().unwrap();
+        assert!(bb.deleted);
+        assert_eq!(bb.path().to_str(), "/deleted/源视频/bb");
     }
 }

@@ -65,6 +65,7 @@ pub enum FileTypePo<'a> {
 #[derive(From, Debug)]
 pub enum PgUserFileId<'a> {
     Id(UserFileId),
+    ComId((UserId, UserFileId)),
     Path(&'a VirtualPath),
 }
 
@@ -128,6 +129,9 @@ where
                 user_files::file_name.eq(path.file_name()),
                 user_files::is_dir.eq(true)
             )
+        }
+        PgUserFileId::ComId((uid, fid)) => {
+            get_result!(user_files::user_id.eq(uid), user_files::id.eq(fid))
         }
     }
 }
@@ -199,6 +203,13 @@ where
     }
 }
 
+pub async fn load_tree_all<'a, T>(root_id: T, conn: &mut PgConn) -> Result<Option<FileNode>>
+where
+    PgUserFileId<'a>: From<T>,
+{
+    load_tree(root_id, u32::MAX, conn).await
+}
+
 pub async fn load_tree<'a, T>(root_id: T, depth: u32, conn: &mut PgConn) -> Result<Option<FileNode>>
 where
     PgUserFileId<'a>: From<T>,
@@ -211,7 +222,18 @@ where
         return Ok(None);
     };
 
-    ensure!(root.user_file.is_dir, "root should be dir");
+    if !root.user_file.is_dir {
+        ensure!(
+            root.user_file.sys_file_id.is_some(),
+            "file must have sys_file_id"
+        );
+        let node = FileNodePo {
+            file_type: FileTypePo::LazyFile(root.user_file.sys_file_id.unwrap()),
+            user_file: root.user_file,
+        };
+        let node = FileNodeConverter::po_to_do(node)?;
+        return Ok(Some(node));
+    }
 
     let mut children = vec![];
     load_tree_recursive(root.user_file.id, depth - 1, false, &mut children, conn).await?;
@@ -290,4 +312,30 @@ async fn load_tree_recursive(
         }
     }
     Ok(())
+}
+
+pub(crate) async fn update(node: &FileNode, conn: &mut PgConn) -> Result<EffectedRow> {
+    let file_po = FileNodeConverter::do_to_po(node);
+    let (u_files, s_files) = file_po.into_iter().unzip::<_, _, Vec<_>, Vec<_>>();
+
+    let s_files: Vec<_> = s_files
+        .into_iter()
+        .filter_map(std::convert::identity)
+        .collect();
+    ensure!(s_files.is_empty(), "sys_files should not be updated");
+
+    let mut effected_total = 0;
+    for u_file in &u_files {
+        let effected = diesel::update(user_files::table)
+            .set(u_file)
+            .filter(user_files::id.eq(u_file.id))
+            .execute(conn)
+            .await?;
+        effected_total += effected;
+    }
+
+    Ok(EffectedRow {
+        effected_row: effected_total,
+        expect_row: u_files.len(),
+    })
 }

@@ -10,7 +10,9 @@ use actix_web::HttpRequest;
 use serde::{Deserialize, Serialize};
 use utils::code;
 
-use crate::application::file_system::service::{self, CreateDirErr, DirTree};
+use crate::application::file_system::service::{
+    self, CopyErr, CreateDirErr, DeleteErr, DirTree, RenameErr,
+};
 use crate::application::file_system::upload::{
     self, FinishUploadTaskErr, RegisterUploadTaskDto, RegisterUploadTaskErr,
     RegisterUploadTaskResp, StoreSliceErr, UploadTaskDto, UploadedUserFile,
@@ -32,10 +34,14 @@ code! {
     }
 
     pub CreatChildFile = 210 {
-        not_allowed = "不允许创建子文件",
+        not_allowed = "不允许创建的路径",
         bad_child_name = "子文件名不合法",
         parent_not_dir = "父文件不是目录",
         already_exist = "文件已存在",
+    }
+
+    pub ModifyFile = 220 {
+        not_found = "文件不存在",
     }
 
     ---
@@ -64,6 +70,18 @@ code! {
         sys_busy = "系统繁忙",
         no_parent = "父目录不存在",
         no_slice = "文件片段不存在",
+    }
+
+    Delete {
+        not_allowed = "不允许删除的文件",
+    }
+
+    Copy {
+        not_found = "文件不存在",
+    }
+
+    Rename {
+        already_exist = "文件已存在",
     }
 }
 
@@ -113,6 +131,9 @@ macro_rules! create_child_err {
             crate::domain::file_system::file::CreateChildErr::IAmNotDir => {
                 CREAT_CHILD_FILE.parent_not_dir.into()
             }
+            crate::domain::file_system::file::CreateChildErr::AlreadyExist => {
+                CREAT_CHILD_FILE.already_exist.into()
+            }
         }
     }};
 }
@@ -144,6 +165,67 @@ impl From<CreateDirErr> for ApiError {
     }
 }
 
+impl From<DeleteErr> for ApiError {
+    fn from(value: DeleteErr) -> Self {
+        match value {
+            DeleteErr::NotExist => MODIFY_FILE.not_found.into(),
+            DeleteErr::Tx(t) => match t {
+                crate::domain::file_system::file::FileDeleteErr::NotAllowed => {
+                    DELETE.not_allowed.into()
+                }
+                crate::domain::file_system::file::FileDeleteErr::AlreadyDeleted => {
+                    MODIFY_FILE.not_found.into()
+                }
+            },
+        }
+    }
+}
+
+impl From<CopyErr> for ApiError {
+    fn from(value: CopyErr) -> Self {
+        match value {
+            CopyErr::Tx(c) => match c {
+                crate::domain::file_system::file::MoveFileErr::Path(p) => path_format_err!(p),
+                crate::domain::file_system::file::MoveFileErr::ParentNotDir => {
+                    CREAT_CHILD_FILE.parent_not_dir.into()
+                }
+                crate::domain::file_system::file::MoveFileErr::AlreadyExist => {
+                    CREAT_CHILD_FILE.already_exist.into()
+                }
+            },
+            CopyErr::PathErr(p) => path_format_err!(p),
+            CopyErr::NotFound => MODIFY_FILE.not_found.into(),
+        }
+    }
+}
+
+impl From<RenameErr> for ApiError {
+    fn from(value: RenameErr) -> Self {
+        match value {
+            RenameErr::Tx(c) => match c {
+                crate::domain::file_system::file::MoveFileErr::Path(p) => path_format_err!(p),
+                crate::domain::file_system::file::MoveFileErr::ParentNotDir => {
+                    CREAT_CHILD_FILE.parent_not_dir.into()
+                }
+                crate::domain::file_system::file::MoveFileErr::AlreadyExist => {
+                    RENAME.already_exist.into()
+                }
+            },
+            RenameErr::PathErr(p) => path_format_err!(p),
+            RenameErr::NotFound => MODIFY_FILE.not_found.into(),
+            RenameErr::Tx2(c) => match c {
+                crate::domain::file_system::file::RenameFileErr::Path(p) => path_format_err!(p),
+                crate::domain::file_system::file::RenameFileErr::ParentNotDir => {
+                    CREAT_CHILD_FILE.parent_not_dir.into()
+                }
+                crate::domain::file_system::file::RenameFileErr::AlreadyExist => {
+                    RENAME.already_exist.into()
+                }
+            },
+        }
+    }
+}
+
 status_doc!();
 
 pub fn actix_config(cfg: &mut web::ServiceConfig) {
@@ -153,6 +235,10 @@ pub fn actix_config(cfg: &mut web::ServiceConfig) {
             .service(web::resource("/doc").route(web::get().to(get_resp_status_doc)))
             .service(web::resource("/home").route(web::get().to(load_home)))
             .service(web::resource("/create_dir").route(web::post().to(create_dir)))
+            .service(web::resource("/delete").route(web::post().to(delete)))
+            .service(web::resource("/copy").route(web::post().to(copy)))
+            .service(web::resource("/move").route(web::post().to(move_to)))
+            .service(web::resource("/rename").route(web::post().to(rename)))
             .service(
                 web::resource("/register_upload_task").route(web::post().to(register_upload_task)),
             )
@@ -247,4 +333,52 @@ async fn upload_finished(
 ) -> JsonResponse<UploadedUserFile> {
     let resp = upload::upload_finished(params.into_inner().task_id).await??;
     ApiResponse::Ok(resp)
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct DeleteDto {
+    file_id: UserFileId,
+}
+
+async fn delete(id: Identity, params: Json<DeleteDto>) -> JsonResponse<()> {
+    let id = id.id()?.parse::<UserId>()?;
+    let DeleteDto { file_id } = params.into_inner();
+    service::delete(id, file_id).await??;
+    ApiResponse::Ok(())
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct MoveToParams {
+    from: Vec<UserFileId>,
+    to: UserFileId,
+}
+
+async fn copy(id: Identity, params: Json<MoveToParams>) -> JsonResponse<()> {
+    let id = id.id()?.parse::<UserId>()?;
+    let MoveToParams { from, to } = params.into_inner();
+    service::copy_to(id, from, to).await??;
+    ApiResponse::Ok(())
+}
+
+async fn move_to(id: Identity, params: Json<MoveToParams>) -> JsonResponse<()> {
+    let id = id.id()?.parse::<UserId>()?;
+    let MoveToParams { from, to } = params.into_inner();
+    service::move_to(id, from, to).await??;
+    ApiResponse::Ok(())
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct RenameParams {
+    file_id: UserFileId,
+    new_name: String,
+}
+
+async fn rename(id: Identity, params: Json<RenameParams>) -> JsonResponse<()> {
+    let id = id.id()?.parse::<UserId>()?;
+    let RenameParams { file_id, new_name } = params.into_inner();
+    service::rename(id, file_id, &new_name).await??;
+    ApiResponse::Ok(())
 }
