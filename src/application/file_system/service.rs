@@ -1,8 +1,8 @@
+use crate::domain::file_system::file::FileOperateErr::*;
 use crate::{
     biz_ok,
     domain::{
-        self,
-        file_system::file::{FileNode, UserFileId, VirtualPath},
+        file_system::file::{FileNode, FileOperateErr, UserFileId, VirtualPath},
         user::user::UserId,
     },
     ensure_biz, ensure_exist,
@@ -14,7 +14,6 @@ use crate::{
     pg_tx,
 };
 use anyhow::{bail, ensure, Result};
-use derive_more::From;
 use serde::Serialize;
 use tracing::debug;
 use utils::db_pools::postgres::{pg_conn, PgConn};
@@ -69,21 +68,11 @@ pub async fn load_home(user_id: UserId) -> Result<DirTree> {
     Ok(DirTree::from_do(&tree)?)
 }
 
-#[derive(From)]
-pub enum CreateDirErr {
-    Create(domain::file_system::file::CreateChildErr),
-    PathErr(crate::domain::file_system::file::VirtualPathErr),
-
-    AlreadyExist,
-    NoParent,
-    NotAllowed,
-}
-
 pub async fn create_dir(
     user_id: UserId,
     dir_id: UserFileId,
     name: &str,
-) -> BizResult<UserFileId, CreateDirErr> {
+) -> BizResult<UserFileId, FileOperateErr> {
     pg_tx!(create_dir_tx, user_id, dir_id, name)
 }
 
@@ -92,31 +81,21 @@ pub async fn create_dir_tx(
     dir_id: UserFileId,
     name: &str,
     conn: &mut PgConn,
-) -> BizResult<UserFileId, CreateDirErr> {
+) -> BizResult<UserFileId, FileOperateErr> {
     let mut parent = ensure_exist!(
-        repo_user_file::find_node(dir_id, conn).await?,
-        CreateDirErr::NoParent
+        repo_user_file::load_tree_dep2((user_id, dir_id), conn).await?,
+        NoParent
     );
-    ensure_biz!(*parent.user_id() == user_id, CreateDirErr::NotAllowed);
     let child = ensure_biz!(parent.create_dir(name));
 
-    ensure_biz!(
-        repo_user_file::save_node(child, conn).await?.is_effected(),
-        CreateDirErr::AlreadyExist
-    );
+    let _ = repo_user_file::save_node(child, conn).await?;
 
     file_sys::create_dir(child.path()).await?;
 
     biz_ok!(*child.id())
 }
 
-#[derive(From)]
-pub enum DeleteErr {
-    Tx(domain::file_system::file::FileDeleteErr),
-    NotExist,
-}
-
-pub async fn delete(user_id: UserId, file_id: UserFileId) -> BizResult<(), DeleteErr> {
+pub async fn delete(user_id: UserId, file_id: UserFileId) -> BizResult<(), FileOperateErr> {
     pg_tx!(delete_tx, user_id, file_id)
 }
 
@@ -124,12 +103,10 @@ pub async fn delete_tx(
     user_id: UserId,
     file_id: UserFileId,
     conn: &mut PgConn,
-) -> BizResult<(), DeleteErr> {
-    use DeleteErr::*;
-
+) -> BizResult<(), FileOperateErr> {
     let mut node = ensure_exist!(
         repo_user_file::load_tree_all((user_id, file_id), conn).await?,
-        NotExist
+        NotFound
     );
     ensure_biz!(node.delete());
 
@@ -141,19 +118,11 @@ pub async fn delete_tx(
     biz_ok!(())
 }
 
-#[derive(From)]
-pub enum RenameErr {
-    Tx(domain::file_system::file::MoveFileErr),
-    Tx2(domain::file_system::file::RenameFileErr),
-    PathErr(crate::domain::file_system::file::VirtualPathErr),
-    NotFound,
-}
-
 pub async fn rename(
     user_id: UserId,
     file_id: UserFileId,
     new_name: &str,
-) -> BizResult<(), RenameErr> {
+) -> BizResult<(), FileOperateErr> {
     pg_tx!(rename_tx, user_id, file_id, new_name)
 }
 
@@ -162,9 +131,7 @@ pub async fn rename_tx(
     file_id: UserFileId,
     new_name: &str,
     conn: &mut PgConn,
-) -> BizResult<(), RenameErr> {
-    use RenameErr::*;
-
+) -> BizResult<(), FileOperateErr> {
     let mut node = ensure_exist!(
         repo_user_file::find_node((user_id, file_id), conn).await?,
         NotFound
@@ -185,7 +152,7 @@ pub async fn move_to(
     user_id: UserId,
     file_id: Vec<UserFileId>,
     new_parent_id: UserFileId,
-) -> BizResult<(), RenameErr> {
+) -> BizResult<(), FileOperateErr> {
     pg_tx!(move_to_tx, user_id, file_id, new_parent_id)
 }
 
@@ -194,9 +161,7 @@ pub async fn move_to_tx(
     file_ids: Vec<UserFileId>,
     new_parent_id: UserFileId,
     conn: &mut PgConn,
-) -> BizResult<(), RenameErr> {
-    use RenameErr::*;
-
+) -> BizResult<(), FileOperateErr> {
     let mut new_parent = ensure_exist!(
         load_tree((user_id, new_parent_id), 2, conn).await?,
         NotFound
@@ -217,18 +182,11 @@ pub async fn move_to_tx(
     biz_ok!(())
 }
 
-#[derive(From)]
-pub enum CopyErr {
-    Tx(domain::file_system::file::MoveFileErr),
-    PathErr(crate::domain::file_system::file::VirtualPathErr),
-    NotFound,
-}
-
 pub async fn copy_to(
     user_id: UserId,
     file_id: Vec<UserFileId>,
     new_parent_id: UserFileId,
-) -> BizResult<(), CopyErr> {
+) -> BizResult<(), FileOperateErr> {
     pg_tx!(copy_to_tx, user_id, file_id, new_parent_id)
 }
 
@@ -237,8 +195,7 @@ pub async fn copy_to_tx(
     file_ids: Vec<UserFileId>,
     new_parent_id: UserFileId,
     conn: &mut PgConn,
-) -> BizResult<(), CopyErr> {
-    use CopyErr::*;
+) -> BizResult<(), FileOperateErr> {
     let mut new_parent = ensure_exist!(
         load_tree((user_id, new_parent_id), 2, conn).await?,
         NotFound
