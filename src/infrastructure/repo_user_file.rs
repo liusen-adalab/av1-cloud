@@ -2,9 +2,9 @@ use std::borrow::Cow;
 
 use crate::{
     domain::{
-        file_system::{
-            file::{FileMetaData, UserDir, UserFile, UserFileId, VirtualPath},
-            TreeConverter, UserFileConverter,
+        file_system::file::{
+            convert::FileNodeConverter, FileNode, FileNodeMetaData, SysFileId, UserFileId,
+            VirtualPath,
         },
         user::user::UserId,
     },
@@ -20,22 +20,19 @@ use diesel::{
 };
 use diesel_async::RunQueryDsl;
 use serde::{Deserialize, Serialize};
-use tracing::debug;
 use utils::db_pools::postgres::{pg_conn, PgConn};
 
 use super::EffectedRow;
 
 diesel::joinable!(user_files -> sys_files (sys_file_id));
 
-#[derive(
-    Queryable, Selectable, Insertable, AsChangeset, Identifiable, Debug, Serialize, Deserialize,
-)]
+#[derive(Queryable, Selectable, Insertable, AsChangeset, Identifiable, Debug)]
 #[diesel(table_name = user_files)]
 pub struct UserFilePo<'a> {
-    pub id: i64,
-    pub sys_file_id: Option<i64>,
-    pub user_id: i64,
-    pub parent_id: Option<i64>,
+    pub id: UserFileId,
+    pub sys_file_id: Option<SysFileId>,
+    pub user_id: UserId,
+    pub parent_id: Option<UserFileId>,
     pub at_dir: Cow<'a, str>,
     pub file_name: Cow<'a, str>,
     pub is_dir: bool,
@@ -47,52 +44,29 @@ pub struct UserFilePo<'a> {
 )]
 #[diesel(table_name = sys_files)]
 pub struct SysFilePo<'a> {
-    pub id: i64,
+    pub id: SysFileId,
     pub size: i64,
     pub hash: Cow<'a, str>,
     pub path: Cow<'a, str>,
     pub is_video: bool,
 }
 
+pub struct FileNodePo<'a> {
+    pub user_file: UserFilePo<'a>,
+    pub file_type: FileTypePo<'a>,
+}
+
+pub enum FileTypePo<'a> {
+    File(SysFilePo<'a>),
+    LazyFile(SysFileId),
+    Dir(Vec<FileNodePo<'a>>),
+}
+
 #[derive(From, Debug)]
 pub enum PgUserFileId<'a> {
     Id(UserFileId),
+    ComId((UserId, UserFileId)),
     Path(&'a VirtualPath),
-}
-
-pub async fn find<'a, T>(id: T, conn: &mut PgConn) -> Result<Option<UserFile>>
-where
-    PgUserFileId<'a>: From<T>,
-{
-    macro_rules! get_result {
-        ($conn:expr, $($filter:expr),+ $(,)?) => {{
-            let Some((file, Some(sys_data))) = user_files::table
-                .left_join(sys_files::table)
-                $(.filter($filter))+
-                .select((UserFilePo::as_select(), Option::<SysFilePo>::as_select()))
-                .get_result::<(UserFilePo, Option<SysFilePo>)>($conn)
-                .await
-                .optional()? else {
-                    return Ok(None);
-                };
-
-             let file = UserFileConverter::po_to_do(file, sys_data)?;
-            Ok(Some(file))
-        }};
-    }
-    match PgUserFileId::from(id) {
-        PgUserFileId::Id(id) => {
-            get_result!(conn, user_files::id.eq(id))
-        }
-        PgUserFileId::Path(path) => {
-            get_result!(
-                conn,
-                user_files::user_id.eq(path.user_id()),
-                user_files::at_dir.eq(path.parent().to_str()),
-                user_files::file_name.eq(path.file_name()),
-            )
-        }
-    }
 }
 
 #[derive(Debug)]
@@ -101,46 +75,68 @@ pub struct UserDirPo<'a> {
     pub children: Vec<UserDirPo<'a>>,
 }
 
-pub async fn find_dir_shallow<'a, T>(id: T, conn: &mut PgConn) -> Result<Option<UserDir>>
+pub async fn find_node<'a, T>(id: T, conn: &mut PgConn) -> Result<Option<FileNode>>
+where
+    PgUserFileId<'a>: From<T>,
+{
+    load_tree(id, 1, conn).await
+}
+
+async fn find_node_inner<'a, 'b, 'c, T>(
+    id: T,
+    conn: &'b mut PgConn,
+) -> Result<Option<FileNodePo<'c>>>
 where
     PgUserFileId<'a>: From<T>,
 {
     macro_rules! get_result {
         ($($filter:expr),+ $(,)?) => {{
-            let Some(file) = user_files::table
-                        $(.filter($filter))+
-                        .select(UserFilePo::as_select())
-                        .for_update()
-                        .get_result::<UserFilePo>(conn)
-                        .await
-                        .optional()? else {
-                            return Ok(None);
-                        };
+            let file = user_files::table
+                    $(.filter($filter))+
+                    .filter(user_files::deleted.eq(false))
+                    .select(UserFilePo::as_select())
+                    .for_update()
+                    .get_result::<UserFilePo>(conn)
+                    .await
+                    .optional()?;
+            let Some(file) = file else {
+                return Ok(None);
+            };
 
-            let file = TreeConverter::po_to_do(UserDirPo {
-                file,
-                children: vec![],
-            })?;
+            let file_type = if file.is_dir {
+                FileTypePo::Dir(vec![])
+            } else {
+                ensure!(file.sys_file_id.is_some(), "file should have sys_file_id");
+                FileTypePo::LazyFile(file.sys_file_id.unwrap())
+            };
+            let file = FileNodePo {
+                user_file: file,
+                file_type,
+            };
+
             Ok(Some(file))
         }};
     }
 
     match PgUserFileId::from(id) {
         PgUserFileId::Id(id) => {
-            get_result!(user_files::id.eq(id), user_files::is_dir.eq(true))
+            get_result!(user_files::id.eq(id))
         }
         PgUserFileId::Path(path) => {
             get_result!(
                 user_files::user_id.eq(path.user_id()),
-                user_files::at_dir.eq(path.parent().to_str()),
+                user_files::at_dir.eq(path.parent_str()),
                 user_files::file_name.eq(path.file_name()),
                 user_files::is_dir.eq(true)
             )
         }
+        PgUserFileId::ComId((uid, fid)) => {
+            get_result!(user_files::user_id.eq(uid), user_files::id.eq(fid))
+        }
     }
 }
 
-pub async fn get_file_data(hash: &str) -> Result<Option<FileMetaData>> {
+pub async fn get_filenode_data(hash: &str) -> Result<Option<FileNodeMetaData>> {
     let conn = &mut pg_conn().await?;
     let file = sys_files::table
         .filter(sys_files::hash.eq(hash))
@@ -149,49 +145,32 @@ pub async fn get_file_data(hash: &str) -> Result<Option<FileMetaData>> {
         .get_result::<SysFilePo>(conn)
         .await
         .optional()?;
-    let file = file.map(UserFileConverter::po_to_do_sys_file);
+    let file = file.map(FileNodeConverter::sys_file_po_to_do);
     Ok(file)
 }
 
-pub async fn save(file: &UserFile, conn: &mut PgConn) -> Result<EffectedRow> {
-    debug!("save file: {:?}", file);
-    let file_po = UserFileConverter::do_to_po(file);
+pub async fn save_node(node: &FileNode, conn: &mut PgConn) -> Result<EffectedRow> {
+    let file_po = FileNodeConverter::do_to_po(node);
+    let (u_files, s_files) = file_po.into_iter().unzip::<_, _, Vec<_>, Vec<_>>();
+
     let effected = diesel::insert_into(user_files::table)
-        .values(&file_po.0)
+        .values(&u_files)
         .execute(conn)
         .await?;
 
-    if effected == 0 {
-        return Ok(EffectedRow(0));
-    }
-
-    let effected2 = diesel::insert_into(sys_files::table)
-        .values(&file_po.1)
-        .execute(conn)
-        .await?;
-    ensure!(effected == effected2, "effected not match");
-
-    Ok(EffectedRow(effected))
-}
-
-pub async fn save_tree(tree: &UserDir, conn: &mut PgConn) -> Result<EffectedRow> {
-    let file_po = TreeConverter::do_to_po(tree);
-    let (user_files, sys_files) = file_po.into_iter().unzip::<_, _, Vec<_>, Vec<_>>();
-    let sys_files: Vec<_> = sys_files
+    let s_files: Vec<_> = s_files
         .into_iter()
         .filter_map(std::convert::identity)
         .collect();
-
-    let effected = diesel::insert_into(user_files::table)
-        .values(&user_files)
-        .execute(conn)
-        .await?;
     diesel::insert_into(sys_files::table)
-        .values(&sys_files)
+        .values(&s_files)
         .execute(conn)
         .await?;
 
-    Ok(EffectedRow(effected))
+    Ok(EffectedRow {
+        effected_row: effected,
+        expect_row: u_files.len(),
+    })
 }
 
 #[derive(From, Debug)]
@@ -214,7 +193,7 @@ where
                 user_files::table,
                 conn,
                 user_files::user_id.eq(path.user_id()),
-                user_files::at_dir.eq(path.parent().to_str()),
+                user_files::at_dir.eq(path.parent_str()),
                 user_files::file_name.eq(path.file_name())
             )
         }
@@ -224,53 +203,139 @@ where
     }
 }
 
-pub async fn load_dir_struct(user_id: UserId) -> Result<Option<UserDir>> {
-    let mut conn = pg_conn().await?;
-    let root: Option<UserFilePo> = user_files::table
-        .select(UserFilePo::as_select())
-        .filter(user_files::deleted.eq(false))
-        .filter(user_files::user_id.eq(user_id))
-        .filter(user_files::file_name.eq("/"))
-        .get_result(&mut conn)
-        .await
-        .optional()?;
-    let Some(root) = root else {
+pub async fn load_tree_all<'a, T>(root_id: T, conn: &mut PgConn) -> Result<Option<FileNode>>
+where
+    PgUserFileId<'a>: From<T>,
+{
+    load_tree(root_id, u32::MAX, conn).await
+}
+
+pub async fn load_tree<'a, T>(root_id: T, depth: u32, conn: &mut PgConn) -> Result<Option<FileNode>>
+where
+    PgUserFileId<'a>: From<T>,
+{
+    if depth == 0 {
+        return Ok(None);
+    }
+
+    let Some(root) = find_node_inner(root_id, conn).await? else {
         return Ok(None);
     };
 
+    if !root.user_file.is_dir {
+        ensure!(
+            root.user_file.sys_file_id.is_some(),
+            "file must have sys_file_id"
+        );
+        let node = FileNodePo {
+            file_type: FileTypePo::LazyFile(root.user_file.sys_file_id.unwrap()),
+            user_file: root.user_file,
+        };
+        let node = FileNodeConverter::po_to_do(node)?;
+        return Ok(Some(node));
+    }
+
     let mut children = vec![];
-    load_struc_recursive(root.id, &mut children, &mut conn).await?;
-    let root = UserDirPo {
-        file: root,
-        children,
+    load_tree_recursive(root.user_file.id, depth - 1, false, &mut children, conn).await?;
+
+    let root = FileNodePo {
+        user_file: root.user_file,
+        file_type: FileTypePo::Dir(children),
     };
-    let root = TreeConverter::po_to_do(root)?;
+    let root = FileNodeConverter::po_to_do(root)?;
+    Ok(Some(root))
+}
+
+pub async fn load_tree_struct<'a, T>(root_id: T) -> Result<Option<FileNode>>
+where
+    PgUserFileId<'a>: From<T>,
+{
+    let mut conn = pg_conn().await?;
+    let Some(root) = find_node_inner(root_id, &mut conn).await? else {
+        return Ok(None);
+    };
+    // release for_update lock
+    drop(conn);
+
+    ensure!(root.user_file.is_dir, "root should be dir");
+
+    let mut children = vec![];
+    let mut conn = pg_conn().await?;
+    load_tree_recursive(root.user_file.id, u32::MAX, true, &mut children, &mut conn).await?;
+    let root = FileNodePo {
+        user_file: root.user_file,
+        file_type: FileTypePo::Dir(children),
+    };
+    let root = FileNodeConverter::po_to_do(root)?;
     Ok(Some(root))
 }
 
 #[async_recursion::async_recursion]
-async fn load_struc_recursive(
-    parent_id: i64,
-    p_children: &mut Vec<UserDirPo>,
+async fn load_tree_recursive(
+    parent_id: UserFileId,
+    depth: u32,
+    only_dir: bool,
+    p_children: &mut Vec<FileNodePo<'_>>,
     conn: &mut PgConn,
 ) -> Result<()> {
-    let children: Vec<UserFilePo> = user_files::table
+    if depth == 0 {
+        return Ok(());
+    }
+
+    let sql = user_files::table
         .select(UserFilePo::as_select())
         .filter(user_files::deleted.eq(false))
-        .filter(user_files::parent_id.eq(parent_id))
-        .filter(user_files::is_dir.eq(true))
-        .load(conn)
-        .await?;
+        .filter(user_files::parent_id.eq(parent_id));
+    let children: Vec<UserFilePo> = if only_dir {
+        sql.filter(user_files::is_dir.eq(true)).load(conn).await?
+    } else {
+        sql.load(conn).await?
+    };
 
     for child in children {
-        let mut ch = vec![];
-        load_struc_recursive(child.id, &mut ch, conn).await?;
+        if child.is_dir {
+            let mut ch = vec![];
 
-        let d = UserDirPo {
-            file: child,
-            children: ch,
-        };
-        p_children.push(d);
+            load_tree_recursive(child.id, depth - 1, only_dir, &mut ch, conn).await?;
+
+            let d = FileNodePo {
+                user_file: child,
+                file_type: FileTypePo::Dir(ch),
+            };
+            p_children.push(d);
+        } else {
+            ensure!(child.sys_file_id.is_some(), "file must have sys_file_id");
+            p_children.push(FileNodePo {
+                file_type: FileTypePo::LazyFile(child.sys_file_id.unwrap()),
+                user_file: child,
+            })
+        }
     }
     Ok(())
+}
+
+pub(crate) async fn update(node: &FileNode, conn: &mut PgConn) -> Result<EffectedRow> {
+    let file_po = FileNodeConverter::do_to_po(node);
+    let (u_files, s_files) = file_po.into_iter().unzip::<_, _, Vec<_>, Vec<_>>();
+
+    let s_files: Vec<_> = s_files
+        .into_iter()
+        .filter_map(std::convert::identity)
+        .collect();
+    ensure!(s_files.is_empty(), "sys_files should not be updated");
+
+    let mut effected_total = 0;
+    for u_file in &u_files {
+        let effected = diesel::update(user_files::table)
+            .set(u_file)
+            .filter(user_files::id.eq(u_file.id))
+            .execute(conn)
+            .await?;
+        effected_total += effected;
+    }
+
+    Ok(EffectedRow {
+        effected_row: effected_total,
+        expect_row: u_files.len(),
+    })
 }

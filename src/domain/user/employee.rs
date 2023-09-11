@@ -1,20 +1,18 @@
-use std::sync::{Mutex, OnceLock};
-
 use anyhow::bail;
 use chrono::{Local, NaiveDateTime};
 use derive_more::*;
-use flaken::Flaken;
 use getset::Getters;
 use rand::{thread_rng, Rng};
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    domain::user::common_err::SanityCheck, ensure_ok, infrastructure::repo_employee::EmployeePo,
+    domain::user::common_err::SanityCheck, ensure_ok, id_wraper,
+    infrastructure::repo_employee::EmployeePo,
 };
 
 use super::{Email, Password, Phone, UserName};
 
-pub type EmployeeId = i64;
+id_wraper!(EmployeeId);
 
 #[derive(Getters, Debug)]
 #[getset(get = "pub(crate)")]
@@ -65,7 +63,7 @@ impl InviteCode {
 impl Employee {
     pub fn create(email: Email, password: Password, invitor: EmployeeId) -> Self {
         Self {
-            id: Self::next_id(),
+            id: EmployeeId::next_id(),
             name: UserName::try_from("employee".to_string()).unwrap(),
             password,
             login_at: Local::now().naive_local(),
@@ -90,13 +88,6 @@ impl Employee {
     }
 
     pub fn logout(&mut self) {}
-
-    fn next_id() -> i64 {
-        static USER_ID_GENERATOR: OnceLock<Mutex<Flaken>> = OnceLock::new();
-        let f = USER_ID_GENERATOR.get_or_init(|| Mutex::new(Flaken::default()));
-        let mut lock = f.lock().unwrap();
-        lock.next() as i64
-    }
 
     pub fn from_po(user: EmployeePo) -> anyhow::Result<Employee> {
         Ok(Employee {

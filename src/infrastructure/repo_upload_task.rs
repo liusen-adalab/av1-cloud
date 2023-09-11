@@ -1,10 +1,13 @@
-use crate::{domain::file_system::service_upload::UploadTask, redis_conn_switch::redis_conn};
+use crate::{
+    domain::file_system::service_upload::{UploadTask, UploadTaskId},
+    redis_conn_switch::redis_conn,
+};
 use anyhow::Result;
 use redis::AsyncCommands;
 
 use super::RedisKey;
 
-pub async fn find(id: i64) -> Result<Option<UploadTask>> {
+pub async fn find(id: UploadTaskId) -> Result<Option<UploadTask>> {
     let key = task_key(id);
     let conn = &mut redis_conn().await?;
     let task: Option<UploadTask> = conn.get(&key).await?;
@@ -23,21 +26,21 @@ pub(crate) async fn update(task: &UploadTask) -> Result<()> {
         // set ttl for task
         let conn = &mut redis_conn().await?;
         let key = task_key(*task.id());
-        conn.set_ex(&key, task, 60 * 60).await?;
+        conn.set_ex(&key, task, 60 * 10).await?;
     } else {
         save(task).await?;
     }
     Ok(())
 }
 
-pub(crate) async fn delete(task_id: i64) -> Result<()> {
+pub(crate) async fn delete(task_id: UploadTaskId) -> Result<()> {
     let conn = &mut redis_conn().await?;
     let key = task_key(task_id);
     conn.del(&key).await?;
     Ok(())
 }
 
-fn task_key(task_id: i64) -> String {
+fn task_key(task_id: UploadTaskId) -> String {
     let key = RedisKey::new("uploading-task");
     key.add_field(task_id.to_string()).into_inner()
 }

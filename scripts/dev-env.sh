@@ -81,7 +81,10 @@ docker run -d \
     --name pg-av1-cloud \
     postgres -N 20
 
-sleep 1.5
-
+# reset database
 echo "resetting pg migrations"
+while ! docker exec -it pg-av1-cloud psql -U postgres -c "select 1" > /dev/null 2>&1; do
+    echo "waiting for postgres to start"
+    sleep 0.5
+done
 diesel database reset --database-url postgres://postgres:postgres@127.0.0.1:54333/av1-cloud

@@ -146,7 +146,7 @@ macro_rules! code {
 #[macro_export]
 macro_rules! log_if_err {
     ($run:expr) => {
-        crate::log_if_err!($run, stringify!($run))
+        $crate::log_if_err!($run, stringify!($run))
     };
 
     ($run:expr, $msg:expr $(,)?) => {

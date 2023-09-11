@@ -117,7 +117,7 @@ async fn load_slices_sorted(dir: &Path) -> Result<Vec<PathBuf>> {
 }
 
 pub async fn virtual_delete(path: &VirtualPath) -> Result<()> {
-    let path = PathManager::virtual_path_to_sys(path);
+    let path = PathManager::virtual_to_disk(path);
     delete(&path).await?;
     Ok(())
 }
@@ -138,9 +138,22 @@ impl IgnoreNotExist for std::io::Result<()> {
     }
 }
 
+macro_rules! nx_is_ok {
+    ($fs_op:expr) => {{
+        match $fs_op {
+            Ok(res) => res,
+            Err(err) => match err.kind() {
+                std::io::ErrorKind::NotFound => {
+                    return Ok(());
+                }
+                _ => return { Err(err.into()) },
+            },
+        }
+    }};
+}
+
 pub async fn delete(path: &Path) -> Result<()> {
-    fs::remove_dir_all(path).await.ignore_nx()?;
-    let meta = fs::metadata(&path).await?;
+    let meta = nx_is_ok!(fs::metadata(&path).await);
     if meta.is_file() {
         fs::remove_file(path).await.ignore_nx()?;
     } else {
@@ -150,26 +163,41 @@ pub async fn delete(path: &Path) -> Result<()> {
 }
 
 pub async fn create_user_link(src: &Path, owner: &VirtualPath) -> Result<()> {
-    let owner = PathManager::virtual_path_to_sys(owner);
-    debug!("creating user link");
+    let owner = PathManager::virtual_to_disk(owner);
 
     delete(&owner).await?;
 
+    debug!(?src, ?owner, "creating user link");
     #[cfg(target_family = "unix")]
     fs::symlink(&src, owner).await?;
 
     #[cfg(target_family = "windows")]
     fs::symlink_file(&src, owner).await?;
+
     Ok(())
 }
 
 pub(crate) async fn create_dir(dir: &VirtualPath) -> Result<()> {
-    let path = PathManager::virtual_path_to_sys(dir);
+    let path = PathManager::virtual_to_disk(dir);
     create_dir_all(&path).await?;
     Ok(())
 }
 
 pub(crate) async fn create_dir_all(dir: &Path) -> Result<()> {
     fs::create_dir_all(dir).await?;
+    Ok(())
+}
+
+pub(crate) async fn virtual_move(from: &VirtualPath, to: &VirtualPath) -> Result<()> {
+    let from = PathManager::virtual_to_disk(from);
+    let to = PathManager::virtual_to_disk(to);
+    fs::rename(from, to).await?;
+    Ok(())
+}
+
+pub(crate) async fn virtual_copy(from: &VirtualPath, to: &VirtualPath) -> Result<()> {
+    let from = PathManager::virtual_to_disk(from);
+    let to = PathManager::virtual_to_disk(to);
+    fs::copy(from, to).await?;
     Ok(())
 }

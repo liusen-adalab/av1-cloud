@@ -6,7 +6,7 @@ pub mod user;
 macro_rules! ensure_ok {
     ($predict:expr, $err:expr) => {
         if !$predict {
-            return Err($err);
+            return Err($err.into());
         }
     };
 }

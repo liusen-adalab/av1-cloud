@@ -9,11 +9,18 @@ pub mod repo_user_file;
 pub mod sms_code;
 
 #[must_use]
-pub struct EffectedRow(usize);
+pub struct EffectedRow {
+    pub expect_row: usize,
+    pub effected_row: usize,
+}
 
 impl EffectedRow {
     pub fn is_effected(&self) -> bool {
-        self.0 > 0
+        self.effected_row > 0
+    }
+
+    pub fn is_all_effected(&self) -> bool {
+        self.effected_row == self.expect_row
     }
 }
 

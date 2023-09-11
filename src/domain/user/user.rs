@@ -1,20 +1,16 @@
-use getset::Getters;
-use std::sync::{Mutex, OnceLock};
-
-use chrono::Local;
-use flaken::Flaken;
-
-use crate::{
-    biz_ok, domain::user::common_err::SanityCheck, ensure_biz, ensure_ok, http::BizResult,
-    infrastructure::repo_user::UserPo, LocalDataTime,
-};
-
 use super::{
     service::{UpdateProfileErr, UserUpdate},
     Email, Password, Phone, UserName,
 };
+use crate::{
+    biz_ok, domain::user::common_err::SanityCheck, ensure_biz, ensure_ok, http::BizResult,
+    id_wraper, infrastructure::repo_user::UserPo, LocalDataTime,
+};
 
-pub type UserId = i64;
+use chrono::Local;
+use getset::Getters;
+
+id_wraper!(UserId);
 
 #[derive(Getters, Debug)]
 #[getset(get = "pub(crate)")]
@@ -34,7 +30,7 @@ pub struct User {
 impl User {
     pub fn create(email: Email, password: Password) -> Self {
         Self {
-            id: Self::next_id() as i64,
+            id: UserId::next_id(),
             name: UserName::try_from("user".to_string()).unwrap(),
             email,
             password,
@@ -91,13 +87,6 @@ impl User {
         }
 
         biz_ok!(())
-    }
-
-    fn next_id() -> u64 {
-        static USER_ID_GENERATOR: OnceLock<Mutex<Flaken>> = OnceLock::new();
-        let f = USER_ID_GENERATOR.get_or_init(|| Mutex::new(Flaken::default()));
-        let mut lock = f.lock().unwrap();
-        lock.next()
     }
 
     pub fn from_po(user: UserPo) -> anyhow::Result<User> {

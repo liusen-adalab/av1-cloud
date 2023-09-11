@@ -5,8 +5,8 @@ use serde::Deserialize;
 
 use crate::{domain::file_system::service::PathManager, settings::get_settings};
 
+pub mod service;
 pub mod upload;
-pub mod user_file;
 
 #[derive(Debug, Deserialize)]
 pub struct FileSystemCfg {
