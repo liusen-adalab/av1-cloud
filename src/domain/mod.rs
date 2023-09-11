@@ -20,6 +20,7 @@ macro_rules! id_wraper {
         )]
         #[diesel(sql_type = ::diesel::sql_types::BigInt)]
         pub struct $type_name(pub i64);
+        async_graphql::scalar!($type_name);
         $crate::diesel_new_type!($type_name, ::diesel::sql_types::Bigint);
 
         impl $type_name {

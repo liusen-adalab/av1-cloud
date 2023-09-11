@@ -1,5 +1,5 @@
 use anyhow::{bail, ensure};
-use async_graphql::{ComplexObject, Enum, InputObject, SimpleObject};
+use async_graphql::{ComplexObject, Enum, InputObject, Result, SimpleObject};
 use chrono::NaiveDateTime;
 use diesel::helper_types::IntoBoxed;
 use diesel::TextExpressionMethods;
@@ -8,13 +8,13 @@ use diesel::{result::OptionalExtension, ExpressionMethods, SelectableHelper};
 use diesel_async::RunQueryDsl;
 use utils::db_pools::postgres::pg_conn;
 
+use crate::domain::file_system::file::UserFileId;
 use crate::schema::users;
 
+use super::file_system::DirContent;
 use super::{MillionTimestamp, Paginate};
 
 use crate::domain::user::user::UserId;
-
-async_graphql::scalar!(UserId);
 
 #[derive(Queryable, Selectable, SimpleObject)]
 #[graphql(complex)]
@@ -39,12 +39,20 @@ pub struct User {
 
 #[ComplexObject]
 impl User {
-    pub async fn level(&self) -> async_graphql::Result<UserLevel> {
+    /// 用户等级
+    pub async fn level(&self) -> Result<UserLevel> {
         Ok(UserLevel::Normal)
     }
 
-    pub async fn status(&self) -> async_graphql::Result<UserStatus> {
+    /// 用户状态
+    pub async fn status(&self) -> Result<UserStatus> {
         Ok(UserStatus::Ok)
+    }
+
+    /// 获取用户文件夹内容
+    async fn dir(&self, file_id: UserFileId, page: Paginate) -> Result<Option<DirContent>> {
+        let dir = DirContent::load(self.id, file_id, page).await?;
+        Ok(dir)
     }
 }
 

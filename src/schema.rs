@@ -32,8 +32,8 @@ diesel::table! {
         general_info -> Nullable<Text>,
         video_info -> Nullable<Text>,
         audio_info -> Nullable<Text>,
-        create_at -> Timestamp,
-        updated_at -> Timestamp,
+        create_at -> Timestamptz,
+        updated_at -> Timestamptz,
     }
 }
 
@@ -47,8 +47,8 @@ diesel::table! {
         file_name -> Varchar,
         is_dir -> Bool,
         deleted -> Bool,
-        create_at -> Timestamp,
-        updated_at -> Timestamp,
+        create_at -> Timestamptz,
+        updated_at -> Timestamptz,
     }
 }
 
