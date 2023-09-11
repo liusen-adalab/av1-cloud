@@ -1,4 +1,5 @@
 use serde::Deserialize;
+use tracing::info;
 use utils::db_pools::postgres::{pg_conn, PgConn};
 
 use crate::domain::user::SanityCheck;
@@ -46,6 +47,22 @@ pub async fn register(user_dto: UserDto) -> BizResult<UserId, RegisterErr> {
 
     let user = User::create(email, password);
     service::register(user).await
+}
+
+pub async fn register_test_user() -> Result<()> {
+    for i in 1..=5 {
+        let email = Email::try_from(format!("aa{}@cc.com", i)).unwrap();
+        let password = Password::try_from_async("aabbccdd".to_string())
+            .await
+            .unwrap();
+        info!(
+            "register test user: email = {} password = aabbccdd",
+            email.as_str()
+        );
+        let user = User::create(email, password);
+        let _ = service::register(user).await;
+    }
+    Ok(())
 }
 
 #[derive(Deserialize)]

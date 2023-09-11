@@ -130,8 +130,9 @@ pub async fn init_global() -> Result<()> {
             .context("init redis pool")?;
     }
 
-    if settings.init_system.register_root_user {
+    if settings.init_system.register_test_user {
         application::user::employee::register_root().await?;
+        application::user::register_test_user().await?;
     }
 
     file_system::init().await.context("init file-system")?;

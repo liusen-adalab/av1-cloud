@@ -32,7 +32,7 @@ pub struct Settings {
 
 #[derive(Deserialize, Debug, Serialize)]
 pub struct InitSystem {
-    pub register_root_user: bool,
+    pub register_test_user: bool,
 }
 
 #[derive(Deserialize, Debug)]
@@ -68,7 +68,7 @@ pub struct Args {
 
     /// Should register root user
     #[arg(short, long)]
-    register_root_user: bool,
+    register_test_user: bool,
 }
 
 pub fn load_settings() -> Result<&'static Settings> {
@@ -92,7 +92,7 @@ pub fn load_settings() -> Result<&'static Settings> {
 
         let c = CmdSettings {
             init_system: InitSystem {
-                register_root_user: args.register_root_user,
+                register_test_user: args.register_test_user,
             },
         };
 
