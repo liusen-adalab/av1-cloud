@@ -28,7 +28,12 @@ macro_rules! id_wraper {
                 use flaken::Flaken;
                 use std::sync::{Mutex, OnceLock};
                 static USER_ID_GENERATOR: OnceLock<Mutex<Flaken>> = OnceLock::new();
-                let f = USER_ID_GENERATOR.get_or_init(|| Mutex::new(Flaken::default()));
+                let f = USER_ID_GENERATOR.get_or_init(|| {
+                    let ip = utils::process::get_local_ip_u32();
+                    let f = flaken::Flaken::default();
+                    let f = f.node(ip as u64);
+                    Mutex::new(f)
+                });
                 let mut lock = f.lock().unwrap();
                 $type_name(lock.next() as i64)
             }
@@ -73,9 +78,17 @@ macro_rules! id_wraper {
 
 #[cfg(test)]
 mod test {
+    use utils::process::get_local_ip_u32;
+
     #[test]
     fn t_id_warper() {
         id_wraper!(UserId);
+
+        let ip = get_local_ip_u32();
+        let ip_node = (ip & ((1 << 10) - 1)) as u64;
+        let id = UserId::next_id();
+        let id_node = flaken::Flaken::default().decode(id.0 as u64).1;
+        assert_eq!(ip_node, id_node);
 
         let a = UserId(1);
         assert_eq!(a.to_string(), "1");
