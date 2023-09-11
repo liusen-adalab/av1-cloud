@@ -154,8 +154,7 @@ impl FileNode {
             loop {
                 let exist = children.iter().any(|ch| ch.path == child.path);
                 if exist {
-                    // unwrap: 由于 child.path 是从 self.path 生成的，所以必然可以合法地增加文件名计数
-                    child.path = child.path.increase_file_name().unwrap();
+                    child.path.increase_file_name()?;
                 } else {
                     break;
                 }
@@ -240,12 +239,9 @@ impl FileNode {
 
     pub fn delete(&mut self) -> Result<(), FileOperateErr> {
         ensure_ok!(!self.deleted, AlreadyDeleted);
-        // let Some(del_path) = self.path.to_deleted() else {
-        //     return Err();
-        // };
 
+        self.path.to_deleted()?;
         self.deleted = true;
-        // self.path = del_path;
 
         if let FileType::Dir(dir) = &mut self.file_type {
             for node in dir {
@@ -272,32 +268,6 @@ impl FileNode {
         }
     }
 }
-
-// #[derive(Debug)]
-// pub struct NotAllowedIncreaseFileName;
-
-// #[derive(PartialEq, Eq, Debug)]
-// pub enum FileDeleteErr {
-//     NotAllowed,
-//     AlreadyDeleted,
-// }
-
-// #[derive(Debug, From)]
-// pub enum RenameErr {
-//     Path(VirtualPathErr),
-//     AlreadyExist,
-// }
-
-// pub enum AddNodeErr {
-//     IAmNotDir,
-// }
-
-// use derive_more::Display;
-// #[derive(Debug, Display, PartialEq, Eq)]
-// pub enum VirtualPathErr {
-//     NotAllowed,
-//     TooLong,
-// }
 
 use derive_more::Display;
 #[derive(Debug, Display, PartialEq, Eq)]
@@ -392,15 +362,12 @@ impl VirtualPath {
         Ok(Self { user_id, path })
     }
 
-    pub fn to_deleted(&mut self) -> Option<Self> {
-        todo!()
-        // if !self.allow_modified() {
-        //     return None;
-        // }
-        // Some(Self {
-        //     user_id: self.user_id,
-        //     path: Path::new(Self::DELETED_DIR_PATH).join(self.path.strip_prefix("/").unwrap()),
-        // })
+    fn to_deleted(&mut self) -> Result<(), VirtualPathErr> {
+        ensure_ok!(self.allow_modified(), NotAllowed);
+        self.path = Path::new(Self::DELETED_DIR_PATH)
+            .join(self.path.strip_prefix("/").unwrap())
+            .to_owned();
+        Ok(())
     }
 
     pub fn join_child(&self, name: &str) -> Result<Self, VirtualPathErr> {
@@ -418,10 +385,8 @@ impl VirtualPath {
     }
 
     // 只允许在 /源视频 或 /已转码视频 下的文件修改文件名
-    pub fn increase_file_name(&self) -> Option<Self> {
-        if !self.allow_modified() {
-            return None;
-        }
+    pub fn increase_file_name(&mut self) -> Result<(), VirtualPathErr> {
+        ensure_ok!(self.allow_modified(), NotAllowed);
 
         let stem = self.path.file_stem().unwrap().to_str().unwrap();
         let extension = self.path.extension();
@@ -433,18 +398,14 @@ impl VirtualPath {
             format!("{}(1)", stem)
         };
 
-        let mut path = self.path.clone();
         let new_file_name = if let Some(extension) = extension {
             format!("{}.{}", new_stem, extension.to_str().unwrap())
         } else {
             new_stem
         };
-        path.set_file_name(new_file_name);
+        self.path.set_file_name(new_file_name);
 
-        Some(Self {
-            user_id: self.user_id,
-            path,
-        })
+        Ok(())
     }
 
     pub fn file_name(&self) -> &str {
@@ -629,38 +590,37 @@ mod test {
 
     #[test]
     fn test_increase_file_name() {
-        let root = VirtualPath::root(1.into());
-        assert!(root.increase_file_name().is_none());
+        let mut root = VirtualPath::root(1.into());
+        assert!(root.increase_file_name().is_err());
 
-        let path = VirtualPath::build_permissive(1.into(), "/源视频").unwrap();
-        assert!(path.increase_file_name().is_none());
+        let mut path = VirtualPath::build_permissive(1.into(), "/源视频").unwrap();
+        assert!(path.increase_file_name().is_err());
 
-        let path = VirtualPath::build(1, "/源视频/aa").unwrap();
-        let path1 = path.increase_file_name().unwrap();
-        assert_eq!(path1.to_str(), "/源视频/aa(1)");
+        let mut path = VirtualPath::build(1, "/源视频/aa").unwrap();
+        path.increase_file_name().unwrap();
+        assert_eq!(path.to_str(), "/源视频/aa(1)");
+        path.increase_file_name().unwrap();
+        assert_eq!(path.to_str(), "/源视频/aa(2)");
 
-        let path2 = path1.increase_file_name().unwrap();
-        assert_eq!(path2.to_str(), "/源视频/aa(2)");
+        let mut path = VirtualPath::build(1, "/源视频/aa(1)").unwrap();
+        path.increase_file_name().unwrap();
+        assert_eq!(path.to_str(), "/源视频/aa(2)");
 
-        let path = VirtualPath::build(1, "/源视频/aa(1)").unwrap();
-        let path1 = path.increase_file_name().unwrap();
-        assert_eq!(path1.to_str(), "/源视频/aa(2)");
+        let mut path = VirtualPath::build(1, "/源视频/aa(1).mp4").unwrap();
+        path.increase_file_name().unwrap();
+        assert_eq!(path.to_str(), "/源视频/aa(2).mp4");
 
-        let path = VirtualPath::build(1, "/源视频/aa(1).mp4").unwrap();
-        let path1 = path.increase_file_name().unwrap();
-        assert_eq!(path1.to_str(), "/源视频/aa(2).mp4");
+        let mut path = VirtualPath::build(1, "/源视频/aa(-1).mp4").unwrap();
+        path.increase_file_name().unwrap();
+        assert_eq!(path.to_str(), "/源视频/aa(-1)(1).mp4");
 
-        let path = VirtualPath::build(1, "/源视频/aa(-1).mp4").unwrap();
-        let path1 = path.increase_file_name().unwrap();
-        assert_eq!(path1.to_str(), "/源视频/aa(-1)(1).mp4");
+        let mut path = VirtualPath::build(1, "/源视频/aa(1)(999).mp4").unwrap();
+        path.increase_file_name().unwrap();
+        assert_eq!(path.to_str(), "/源视频/aa(1)(1000).mp4");
 
-        let path = VirtualPath::build(1, "/源视频/aa(1)(999).mp4").unwrap();
-        let path1 = path.increase_file_name().unwrap();
-        assert_eq!(path1.to_str(), "/源视频/aa(1)(1000).mp4");
-
-        let path = VirtualPath::build(1, "/源视频/.aa(1)(-999).mp4").unwrap();
-        let path1 = path.increase_file_name().unwrap();
-        assert_eq!(path1.to_str(), "/源视频/.aa(1)(-999)(1).mp4");
+        let mut path = VirtualPath::build(1, "/源视频/.aa(1)(-999).mp4").unwrap();
+        path.increase_file_name().unwrap();
+        assert_eq!(path.to_str(), "/源视频/.aa(1)(-999)(1).mp4");
     }
 
     #[test]

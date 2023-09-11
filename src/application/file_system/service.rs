@@ -95,25 +95,27 @@ pub async fn create_dir_tx(
     biz_ok!(*child.id())
 }
 
-pub async fn delete(user_id: UserId, file_id: UserFileId) -> BizResult<(), FileOperateErr> {
-    pg_tx!(delete_tx, user_id, file_id)
+pub async fn delete(user_id: UserId, file_ids: Vec<UserFileId>) -> BizResult<(), FileOperateErr> {
+    pg_tx!(delete_tx, user_id, file_ids)
 }
 
 pub async fn delete_tx(
     user_id: UserId,
-    file_id: UserFileId,
+    file_ids: Vec<UserFileId>,
     conn: &mut PgConn,
 ) -> BizResult<(), FileOperateErr> {
-    let mut node = ensure_exist!(
-        repo_user_file::load_tree_all((user_id, file_id), conn).await?,
-        NotFound
-    );
-    ensure_biz!(node.delete());
+    for file_id in file_ids {
+        let mut node = ensure_exist!(
+            repo_user_file::load_tree_all((user_id, file_id), conn).await?,
+            NotFound
+        );
+        ensure_biz!(node.delete());
 
-    let effected = repo_user_file::update(&node, conn).await?.is_effected();
-    ensure!(effected, "delete node failed");
+        let effected = repo_user_file::update(&node, conn).await?.is_effected();
+        ensure!(effected, "delete node failed");
 
-    file_sys::virtual_delete(node.path()).await?;
+        file_sys::virtual_delete(node.path()).await?;
+    }
 
     biz_ok!(())
 }

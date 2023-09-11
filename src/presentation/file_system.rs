@@ -233,13 +233,13 @@ async fn upload_finished(
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct DeleteDto {
-    file_id: UserFileId,
+    file_ids: Vec<UserFileId>,
 }
 
 async fn delete(id: Identity, params: Json<DeleteDto>) -> JsonResponse<()> {
     let id = id.id()?.parse::<UserId>()?;
-    let DeleteDto { file_id } = params.into_inner();
-    service::delete(id, file_id).await??;
+    let DeleteDto { file_ids } = params.into_inner();
+    service::delete(id, file_ids).await??;
     ApiResponse::Ok(())
 }
 
