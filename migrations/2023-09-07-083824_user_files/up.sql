@@ -11,8 +11,8 @@ CREATE TABLE user_files(
     is_dir BOOLEAN NOT NULL,
 
     deleted BOOLEAN NOT NULL DEFAULT false,
-    create_at TIMESTAMP NOT NULL DEFAULT  NOW(),
-    updated_at TIMESTAMP NOT NULL DEFAULT  NOW(),
+    create_at TIMESTAMPTz NOT NULL DEFAULT  NOW(),
+    updated_at TIMESTAMPTz NOT NULL DEFAULT  NOW(),
     
     UNIQUE(user_id, at_dir, file_name),
     PRIMARY KEY (id)

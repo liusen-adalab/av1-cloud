@@ -23,8 +23,8 @@ CREATE TABLE sys_files(
     video_info TEXT,
     audio_info TEXT,
 
-    create_at TIMESTAMP NOT NULL DEFAULT  NOW(),
-    updated_at TIMESTAMP NOT NULL DEFAULT  NOW(),
+    create_at TIMESTAMPTz NOT NULL DEFAULT  NOW(),
+    updated_at TIMESTAMPTz NOT NULL DEFAULT  NOW(),
 
     PRIMARY KEY (id)
 );

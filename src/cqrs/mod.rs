@@ -1,5 +1,3 @@
-pub(crate) mod user;
-
 use ::diesel::{deserialize::FromSqlRow, expression::AsExpression};
 use actix_identity::Identity;
 use actix_web::{web, HttpResponse};
@@ -9,6 +7,9 @@ use async_graphql::{
 };
 use async_graphql_actix_web::{GraphQLRequest, GraphQLResponse};
 use serde::{Deserialize, Serialize};
+
+pub mod file_system;
+pub(crate) mod user;
 
 pub fn actix_config(cfg: &mut web::ServiceConfig) {
     let schema = Schema::build(QueryRoot, EmptyMutation, EmptySubscription).finish();
@@ -40,14 +41,20 @@ impl QueryRoot {
 
     /// 获取用户
     async fn user(&self, ctx: &Context<'_>) -> async_graphql::Result<User> {
-        let id = userid_unchecked(ctx);
+        let id = ctx.user_id_unchecked();
         let id = User::load(id).await?;
         Ok(id)
     }
 }
 
-fn userid_unchecked(ctx: &Context<'_>) -> UserId {
-    *(ctx.data_unchecked::<UserId>())
+pub trait UserIdCtxExt {
+    fn user_id_unchecked(&self) -> UserId;
+}
+
+impl UserIdCtxExt for Context<'_> {
+    fn user_id_unchecked(&self) -> UserId {
+        *(self.data_unchecked::<UserId>())
+    }
 }
 
 pub type AdminSchema = Schema<AdminQueryRoot, EmptyMutation, EmptySubscription>;
@@ -89,7 +96,7 @@ async fn index(
         .map_err(|err| -> Box<dyn std::error::Error> { format!("{}", err).into() })?
         .parse()
         .map_err(|err| -> Box<dyn std::error::Error> { format!("{}", err).into() })?;
-    let req = req.data(id);
+    let req = req.data(UserId(id));
     Ok(schema.execute(req).await.into())
 }
 
