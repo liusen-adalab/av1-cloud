@@ -7,8 +7,8 @@ use utils::db_pools::postgres::pg_conn;
 use utils::db_pools::postgres::PgConn;
 use utils::log_if_err;
 
-use crate::domain::file_system::file::CreateChildErr;
 use crate::domain::file_system::file::FileNodeMetaData;
+use crate::domain::file_system::file::FileOperateErr;
 use crate::domain::file_system::file::UserFileId;
 use crate::domain::file_system::service_upload;
 use crate::domain::file_system::service_upload::UploadTaskId;
@@ -170,9 +170,8 @@ pub struct UploadedUserFile {
 
 #[derive(From, Debug)]
 pub enum FinishUploadTaskErr {
+    FsDomain(FileOperateErr),
     HashNotMatch,
-    SysBusy(tokio::time::error::Elapsed),
-    CreateFile(CreateChildErr),
     NoParent,
     NoSlice,
     NoTask,
@@ -201,10 +200,8 @@ pub async fn upload_finished_tx(
     }
 
     // load parent
-    let mut parent = ensure_exist!(
-        repo_user_file::load_tree(*task.parent_dir_id(), 2, conn).await?,
-        NoParent
-    );
+    let id = (*task.user_id(), *task.parent_dir_id());
+    let mut parent = ensure_exist!(repo_user_file::load_tree_dep2(id, conn).await?, NoParent);
 
     // generate user file
     let file_data = ensure_biz!(load_sys_file(&task).await?);

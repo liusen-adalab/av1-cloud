@@ -210,6 +210,13 @@ where
     load_tree(root_id, u32::MAX, conn).await
 }
 
+pub async fn load_tree_dep2<'a, T>(root_id: T, conn: &mut PgConn) -> Result<Option<FileNode>>
+where
+    PgUserFileId<'a>: From<T>,
+{
+    load_tree(root_id, 2, conn).await
+}
+
 pub async fn load_tree<'a, T>(root_id: T, depth: u32, conn: &mut PgConn) -> Result<Option<FileNode>>
 where
     PgUserFileId<'a>: From<T>,

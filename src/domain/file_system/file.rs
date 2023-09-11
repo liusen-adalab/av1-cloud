@@ -71,25 +71,16 @@ impl FileNodeMetaData {
 }
 
 #[derive(From, Debug, PartialEq, Eq)]
-pub enum CreateChildErr {
-    Path(VirtualPathErr),
-    IAmNotDir,
+pub enum FileOperateErr {
+    AlreadyDeleted,
+    NotFound,
     AlreadyExist,
+    ParentNotDir,
+    NoParent,
+    Path(VirtualPathErr),
 }
 
-#[derive(From, Debug, PartialEq, Eq)]
-pub enum MoveFileErr {
-    Path(VirtualPathErr),
-    ParentNotDir,
-    AlreadyExist,
-}
-
-#[derive(From, Debug, PartialEq, Eq)]
-pub enum RenameFileErr {
-    Path(VirtualPathErr),
-    ParentNotDir,
-    AlreadyExist,
-}
+use FileOperateErr::*;
 
 impl FileNode {
     pub fn user_home(user_id: UserId) -> Self {
@@ -126,7 +117,7 @@ impl FileNode {
     }
 
     // 只能在 /源视频 或 /已转码视频 下创建文件夹
-    pub fn create_dir(&mut self, name: &str) -> Result<&mut Self, CreateChildErr> {
+    pub fn create_dir(&mut self, name: &str) -> Result<&mut Self, FileOperateErr> {
         self.create_child(name, None)
     }
 
@@ -135,7 +126,7 @@ impl FileNode {
         &mut self,
         name: &str,
         metadata: FileNodeMetaData,
-    ) -> Result<&mut Self, CreateChildErr> {
+    ) -> Result<&mut Self, FileOperateErr> {
         self.create_child(name, Some(metadata))
     }
 
@@ -143,9 +134,7 @@ impl FileNode {
         &mut self,
         name: &str,
         metadata: Option<FileNodeMetaData>,
-    ) -> Result<&mut Self, CreateChildErr> {
-        use CreateChildErr::*;
-
+    ) -> Result<&mut Self, FileOperateErr> {
         let path = self.path.join_child(name)?;
         let file_type = if let Some(meta) = metadata {
             FileType::File(meta)
@@ -175,7 +164,7 @@ impl FileNode {
             children.push(child);
             Ok(children.last_mut().unwrap())
         } else {
-            Err(IAmNotDir)
+            Err(ParentNotDir)
         }
     }
 
@@ -189,7 +178,7 @@ impl FileNode {
         paths
     }
 
-    pub fn copy_to<'a>(&self, new_parent: &'a mut Self) -> Result<&'a mut Self, MoveFileErr> {
+    pub fn copy_to<'a>(&self, new_parent: &'a mut Self) -> Result<&'a mut Self, FileOperateErr> {
         let copyed = self.copy(new_parent.id);
         let copyed = copyed.move_to(new_parent)?;
         Ok(copyed)
@@ -209,8 +198,7 @@ impl FileNode {
         copyed
     }
 
-    pub fn move_to<'a>(mut self, new_parent: &'a mut Self) -> Result<&'a mut Self, MoveFileErr> {
-        use MoveFileErr::*;
+    pub fn move_to<'a>(mut self, new_parent: &'a mut Self) -> Result<&'a mut Self, FileOperateErr> {
         let FileType::Dir(children) = &mut new_parent.file_type else {
             return Err(ParentNotDir);
         };
@@ -225,10 +213,9 @@ impl FileNode {
         Ok(children.last_mut().unwrap())
     }
 
-    pub fn rename_child(&self, child: &mut FileNode, new_name: &str) -> Result<(), RenameFileErr> {
-        use RenameFileErr::*;
+    pub fn rename_child(&self, child: &mut FileNode, new_name: &str) -> Result<(), FileOperateErr> {
         let FileType::Dir(children) = &self.file_type else {
-            return Err(RenameFileErr::ParentNotDir);
+            return Err(ParentNotDir);
         };
 
         let new_path = child.path.rename(new_name)?;
@@ -240,7 +227,7 @@ impl FileNode {
         Ok(())
     }
 
-    fn move_inner(&mut self, new_path: VirtualPath) -> Result<(), VirtualPathErr> {
+    fn move_inner(&mut self, new_path: VirtualPath) -> Result<(), FileOperateErr> {
         self.path = new_path;
         if let FileType::Dir(dir) = &mut self.file_type {
             for node in dir {
@@ -251,15 +238,14 @@ impl FileNode {
         Ok(())
     }
 
-    pub fn delete(&mut self) -> Result<(), FileDeleteErr> {
-        use FileDeleteErr::*;
+    pub fn delete(&mut self) -> Result<(), FileOperateErr> {
         ensure_ok!(!self.deleted, AlreadyDeleted);
-        let Some(del_path) = self.path.to_deleted() else {
-            return Err(NotAllowed);
-        };
+        // let Some(del_path) = self.path.to_deleted() else {
+        //     return Err();
+        // };
 
         self.deleted = true;
-        self.path = del_path;
+        // self.path = del_path;
 
         if let FileType::Dir(dir) = &mut self.file_type {
             for node in dir {
@@ -287,31 +273,41 @@ impl FileNode {
     }
 }
 
-#[derive(Debug)]
-pub struct NotAllowedIncreaseFileName;
+// #[derive(Debug)]
+// pub struct NotAllowedIncreaseFileName;
 
-#[derive(PartialEq, Eq, Debug)]
-pub enum FileDeleteErr {
-    NotAllowed,
-    AlreadyDeleted,
-}
+// #[derive(PartialEq, Eq, Debug)]
+// pub enum FileDeleteErr {
+//     NotAllowed,
+//     AlreadyDeleted,
+// }
 
-#[derive(Debug, From)]
-pub enum RenameErr {
-    Path(VirtualPathErr),
-    AlreadyExist,
-}
+// #[derive(Debug, From)]
+// pub enum RenameErr {
+//     Path(VirtualPathErr),
+//     AlreadyExist,
+// }
 
-pub enum AddNodeErr {
-    IAmNotDir,
-}
+// pub enum AddNodeErr {
+//     IAmNotDir,
+// }
+
+// use derive_more::Display;
+// #[derive(Debug, Display, PartialEq, Eq)]
+// pub enum VirtualPathErr {
+//     NotAllowed,
+//     TooLong,
+// }
 
 use derive_more::Display;
 #[derive(Debug, Display, PartialEq, Eq)]
 pub enum VirtualPathErr {
     NotAllowed,
+    BadFileName,
     TooLong,
 }
+use VirtualPathErr::*;
+
 impl std::error::Error for VirtualPathErr {}
 
 impl VirtualPath {
@@ -396,19 +392,18 @@ impl VirtualPath {
         Ok(Self { user_id, path })
     }
 
-    pub fn to_deleted(&self) -> Option<Self> {
-        if !self.allow_modified() {
-            return None;
-        }
-        Some(Self {
-            user_id: self.user_id,
-            path: Path::new(Self::DELETED_DIR_PATH).join(self.path.strip_prefix("/").unwrap()),
-        })
+    pub fn to_deleted(&mut self) -> Option<Self> {
+        todo!()
+        // if !self.allow_modified() {
+        //     return None;
+        // }
+        // Some(Self {
+        //     user_id: self.user_id,
+        //     path: Path::new(Self::DELETED_DIR_PATH).join(self.path.strip_prefix("/").unwrap()),
+        // })
     }
 
     pub fn join_child(&self, name: &str) -> Result<Self, VirtualPathErr> {
-        use VirtualPathErr::*;
-
         ensure_ok!(self.allow_add_child(), NotAllowed);
 
         ensure_ok!(!name.contains(".."), NotAllowed);
@@ -696,17 +691,15 @@ mod test {
 
     #[test]
     fn t_create_child() {
-        use super::CreateChildErr::*;
-
         let mut home = FileNode::user_home(1.into());
         assert_eq!(
             home.create_dir("aa").unwrap_err(),
-            CreateChildErr::Path(VirtualPathErr::NotAllowed)
+            FileOperateErr::Path(VirtualPathErr::NotAllowed)
         );
 
         assert_eq!(
             home.create_dir("源视频").unwrap_err(),
-            CreateChildErr::Path(VirtualPathErr::NotAllowed)
+            FileOperateErr::Path(VirtualPathErr::NotAllowed)
         );
 
         let children = home.children_mut().unwrap();
@@ -714,7 +707,7 @@ mod test {
 
         let aa_data = FileNodeMetaData::new(1, "hash".to_string(), PathBuf::from("path"));
         let aa = resource.create_file("aa", aa_data.clone()).unwrap();
-        assert_eq!(aa.create_dir("name").unwrap_err(), IAmNotDir);
+        assert_eq!(aa.create_dir("name").unwrap_err(), ParentNotDir);
         let aa1 = resource.create_file("aa", aa_data.clone()).unwrap();
         assert_eq!(aa1.path().to_str(), "/源视频/aa(1)");
 
@@ -722,15 +715,15 @@ mod test {
         use super::VirtualPathErr;
         assert_eq!(
             encoded.create_dir(".").unwrap_err(),
-            CreateChildErr::Path(VirtualPathErr::NotAllowed)
+            FileOperateErr::Path(VirtualPathErr::NotAllowed)
         );
         assert_eq!(
             encoded.create_dir("./aa").unwrap_err(),
-            CreateChildErr::Path(VirtualPathErr::NotAllowed)
+            FileOperateErr::Path(VirtualPathErr::NotAllowed)
         );
         assert_eq!(
             encoded.create_dir("..").unwrap_err(),
-            CreateChildErr::Path(VirtualPathErr::NotAllowed)
+            FileOperateErr::Path(VirtualPathErr::NotAllowed)
         );
     }
 
@@ -782,7 +775,7 @@ mod test {
         let bbcc = aacc.copy_to(bb).unwrap();
         assert_eq!(bbcc.path().to_str(), "/源视频/bb/cc");
 
-        assert_eq!(bbcc.copy_to(aa).unwrap_err(), MoveFileErr::AlreadyExist);
+        assert_eq!(bbcc.copy_to(aa).unwrap_err(), AlreadyExist);
 
         let bbccaa = aa.copy_to(bbcc).unwrap();
         assert_eq!(bbccaa.path().to_str(), "/源视频/bb/cc/aa");
@@ -808,9 +801,8 @@ mod test {
 
     #[test]
     fn t_delete() {
-        use FileDeleteErr::*;
         let mut home = FileNode::user_home(1.into());
-        assert_eq!(home.delete().unwrap_err(), NotAllowed);
+        assert_eq!(home.delete().unwrap_err(), FileOperateErr::Path(NotAllowed));
 
         let (aa, bb) = test_user_home(&mut home);
 
