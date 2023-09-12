@@ -162,12 +162,16 @@ pub async fn delete(path: &Path) -> Result<()> {
 fn delete_inner(path: &Path) -> Result<()> {
     use std::fs;
 
-    let meta = nx_is_ok!(fs::metadata(&path));
+    let meta = nx_is_ok!(fs::symlink_metadata(path).or_else(|_err| fs::metadata(path)));
     if meta.is_file() {
+        tracing::debug!(?path, "removing file");
         fs::remove_file(path).ignore_nx()?;
     } else {
+        tracing::debug!(?path, "removing directory or symlink");
         fs::remove_dir_all(path).ignore_nx()?;
     }
+
+    tracing::debug!(?path, "removed");
     Ok(())
 }
 

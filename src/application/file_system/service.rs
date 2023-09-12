@@ -109,12 +109,13 @@ pub async fn delete_tx(
             repo_user_file::load_tree_all((user_id, file_id), conn).await?,
             NotFound
         );
+        let old_path = node.path().clone();
         ensure_biz!(node.delete());
 
         let effected = repo_user_file::update(&node, conn).await?.is_effected();
         ensure!(effected, "delete node failed");
 
-        file_sys::virtual_delete(node.path()).await?;
+        file_sys::virtual_delete(&old_path).await?;
     }
 
     biz_ok!(())

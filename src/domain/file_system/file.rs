@@ -257,7 +257,7 @@ impl FileNode {
     pub fn delete(&mut self) -> Result<(), FileOperateErr> {
         ensure_ok!(!self.deleted, AlreadyDeleted);
 
-        self.path.to_deleted()?;
+        self.path.to_deleted(self.id)?;
         self.deleted = true;
 
         if let FileType::Dir(dir) = &mut self.file_type {
@@ -387,9 +387,10 @@ impl VirtualPath {
         Ok(Self { user_id, path })
     }
 
-    fn to_deleted(&mut self) -> Result<(), VirtualPathErr> {
+    fn to_deleted(&mut self, unique_prefix: impl ToString) -> Result<(), VirtualPathErr> {
         ensure_ok!(self.allow_modified(), NotAllowed);
         self.path = Path::new(Self::DELETED_DIR_PATH)
+            .join(unique_prefix.to_string())
             .join(self.path.strip_prefix("/").unwrap())
             .to_owned();
         Ok(())
@@ -537,8 +538,6 @@ pub mod convert {
         pub fn po_to_do(po: FileNodePo) -> anyhow::Result<FileNode> {
             let mut node = Self::po_to_do_inner(po)?;
             node.sort_by_name();
-
-            tracing::info!("load tree outter: {:#?}", node);
 
             Ok(node)
         }
@@ -839,14 +838,18 @@ mod test {
 
         aa.create_dir("cc").unwrap();
         aa.delete().unwrap();
+
         assert!(aa.deleted);
-        assert_eq!(aa.path().to_str(), "/deleted/源视频/aa");
+        assert_eq!(aa.path().to_str(), format!("/deleted/{}/源视频/aa", aa.id));
         let aacc = aa.children_mut().unwrap().get_mut(0).unwrap();
         assert!(aacc.deleted);
-        assert_eq!(aacc.path().to_str(), "/deleted/源视频/aa/cc");
+        assert_eq!(
+            aacc.path().to_str(),
+            format!("/deleted/{}/源视频/aa/cc", aacc.id)
+        );
 
         bb.delete().unwrap();
         assert!(bb.deleted);
-        assert_eq!(bb.path().to_str(), "/deleted/源视频/bb");
+        assert_eq!(bb.path().to_str(), format!("/deleted/{}/源视频/bb", bb.id));
     }
 }
