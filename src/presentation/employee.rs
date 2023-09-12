@@ -80,7 +80,7 @@ impl From<LoginErr> for ApiError {
 pub fn config(cfg: &mut web::ServiceConfig) {
     cfg.service(
         web::scope("/admin/employee")
-            .service(web::resource("/doc").route(web::get().to(get_resp_status_doc)))
+            .service(web::resource("/doc").route(web::get().to(biz_status_doc)))
             .service(web::resource("/invite_code").route(web::get().to(generate_invite_code)))
             .service(web::resource("/register").route(web::post().to(register)))
             .service(web::resource("/login").route(web::post().to(login)))

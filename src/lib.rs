@@ -53,6 +53,7 @@ pub async fn build_http_server() -> Result<Server> {
         let session = build_session_mw(store.clone());
         let cors = Cors::permissive();
         App::new()
+            .configure(presentation::config)
             .configure(user::config)
             .configure(employee::config)
             .configure(cqrs::actix_config)

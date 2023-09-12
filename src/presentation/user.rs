@@ -13,7 +13,7 @@ use crate::{
     },
     domain::user::service::{LoginErr, RegisterErr, ResetPasswordErr, UpdateProfileErr},
     http::{ApiError, ApiResponse, JsonResponse},
-    log_if_err,
+    log_if_err, status_doc,
 };
 
 code! {
@@ -216,7 +216,7 @@ impl From<SendSmsCodeErr> for ApiError {
 pub fn config(cfg: &mut web::ServiceConfig) {
     cfg.service(
         web::scope("/api/user")
-            .service(web::resource("/doc").route(web::get().to(get_resp_status_doc)))
+            .service(web::resource("/doc").route(web::get().to(biz_status_doc)))
             .service(web::resource("/check_register").route(web::get().to(check_register)))
             .service(web::resource("/check_email_code").route(web::get().to(check_email_code)))
             .service(web::resource("/register").route(web::post().to(register)))
@@ -230,31 +230,12 @@ pub fn config(cfg: &mut web::ServiceConfig) {
     )
     .service(
         web::scope("/admin/user")
-            .service(web::resource("/doc").route(web::get().to(get_resp_status_doc)))
+            .service(web::resource("/doc").route(web::get().to(biz_status_doc)))
             .service(web::resource("/modify").route(web::post().to(update_profile_by_employee))),
     );
 }
 
-#[derive(Serialize)]
-pub struct StatusCode {
-    code: u32,
-    msg: &'static str,
-    endpoint: &'static str,
-    tip: &'static str,
-}
-
-pub async fn get_resp_status_doc() -> JsonResponse<Vec<StatusCode>> {
-    let doc = err_list()
-        .into_iter()
-        .map(|d| StatusCode {
-            code: d.err.code,
-            endpoint: d.endpoint,
-            msg: d.err.msg,
-            tip: d.err.tip,
-        })
-        .collect();
-    ApiResponse::Ok(doc)
-}
+status_doc!();
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]

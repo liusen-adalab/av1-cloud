@@ -127,7 +127,7 @@ pub fn actix_config(cfg: &mut web::ServiceConfig) {
     let m_limit = MultipartFormConfig::default().memory_limit(1024 * 1024 * 100);
     cfg.service(
         web::scope("/api/fs")
-            .service(web::resource("/doc").route(web::get().to(get_resp_status_doc)))
+            .service(web::resource("/doc").route(web::get().to(biz_status_doc)))
             .service(web::resource("/home").route(web::get().to(load_home)))
             .service(web::resource("/create_dir").route(web::post().to(create_dir)))
             .service(web::resource("/delete").route(web::post().to(delete)))

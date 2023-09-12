@@ -1,4 +1,9 @@
+use std::collections::HashSet;
+
+use actix_web::web;
 use serde::Serialize;
+
+use crate::http::{ApiResponse, JsonResponse};
 
 pub mod employee;
 pub mod file_system;
@@ -17,7 +22,12 @@ macro_rules! status_doc {
     () => {
         use super::StatusCode;
 
-        pub async fn get_resp_status_doc() -> JsonResponse<Vec<StatusCode>> {
+        pub async fn biz_status_doc() -> JsonResponse<Vec<StatusCode>> {
+            let doc = biz_status_doc_inner();
+            ApiResponse::Ok(doc)
+        }
+
+        pub fn biz_status_doc_inner() -> Vec<StatusCode> {
             let doc = err_list()
                 .into_iter()
                 .map(|d| StatusCode {
@@ -27,7 +37,28 @@ macro_rules! status_doc {
                     tip: d.err.tip,
                 })
                 .collect();
-            ApiResponse::Ok(doc)
+            doc
         }
     };
+}
+
+pub fn config(cfg: &mut web::ServiceConfig) {
+    cfg.service(web::resource("/admin/doc").route(web::get().to(doc)))
+        .service(web::resource("/api/doc").route(web::get().to(doc)));
+}
+
+pub async fn doc() -> JsonResponse<Vec<StatusCode>> {
+    let user_doc = user::biz_status_doc_inner();
+    let fs_doc = file_system::biz_status_doc_inner();
+    let employee_doc = employee::biz_status_doc_inner();
+
+    let mut doc = Vec::new();
+    doc.extend(user_doc);
+    doc.extend(fs_doc);
+    doc.extend(employee_doc);
+
+    let mut uniques = HashSet::new();
+    doc.retain(|d| uniques.insert(d.code));
+
+    ApiResponse::Ok(doc)
 }
