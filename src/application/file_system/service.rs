@@ -145,7 +145,13 @@ pub async fn rename_tx(
         NotFound
     );
 
+    let old_path = node.path().clone();
     ensure_biz!(parent.rename_child(&mut node, new_name));
+    let new_path = node.path().clone();
+
+    let _ = repo_user_file::update(&node, conn).await?;
+
+    file_sys::virtual_move(&old_path, &new_path).await?;
 
     biz_ok!(())
 }

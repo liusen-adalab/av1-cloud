@@ -190,7 +190,7 @@ impl FileNode {
 
         if let FileType::Dir(dir) = &mut copyed.file_type {
             for node in dir {
-                node.copy(copyed.id);
+                *node = node.copy(copyed.id);
             }
         }
 
@@ -722,23 +722,26 @@ mod test {
     #[test]
     fn t_copy() {
         let mut home = FileNode::user_home(1.into());
-        let resource = home.children_mut().unwrap().get_mut(0).unwrap();
-
-        resource.create_dir("aa").unwrap();
-        resource.create_dir("bb").unwrap();
-
-        let ([aa], [bb]) = resource.children_mut().unwrap().split_at_mut(1) else {
-            panic!()
-        };
+        let (aa, bb) = test_user_home(&mut home);
 
         let aacc = aa.create_dir("cc").unwrap();
+
+        let aacc_id = aacc.id;
+        assert_eq!(aacc.path().to_str(), "/源视频/aa/cc");
+        let bbid = bb.id;
         let bbcc = aacc.copy_to(bb).unwrap();
         assert_eq!(bbcc.path().to_str(), "/源视频/bb/cc");
-
-        assert_eq!(bbcc.copy_to(aa).unwrap_err(), AlreadyExist);
+        assert_ne!(aacc.id, bbcc.id);
+        assert_eq!(bbcc.parent_id.unwrap(), bbid);
 
         let bbccaa = aa.copy_to(bbcc).unwrap();
         assert_eq!(bbccaa.path().to_str(), "/源视频/bb/cc/aa");
+        let bbccaacc = bbccaa.children().unwrap().get(0).unwrap();
+        assert_eq!(bbccaacc.path().to_str(), "/源视频/bb/cc/aa/cc");
+        assert_ne!(bbccaacc.id, aacc_id);
+        assert_eq!(bbccaa.parent_id.unwrap(), bbcc.id);
+
+        assert_eq!(bbcc.copy_to(aa).unwrap_err(), AlreadyExist);
     }
 
     // /

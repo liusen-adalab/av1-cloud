@@ -5,8 +5,8 @@ use std::{
     path::{Path, PathBuf},
 };
 use tempfile::NamedTempFile;
-use tokio::{fs, io::AsyncWriteExt};
-use tracing::debug;
+use tokio::{fs, io::AsyncWriteExt, task::spawn_blocking};
+use tracing::{debug, warn};
 
 use crate::domain::file_system::{file::VirtualPath, service::PathManager};
 
@@ -45,7 +45,7 @@ pub struct MergedFile {
 impl MergedFile {
     pub async fn persist(self, path: &Path) -> Result<()> {
         let path = path.to_owned();
-        tokio::task::spawn_blocking(move || self.tmp_file.persist(path)).await??;
+        spawn_blocking(move || self.tmp_file.persist(path)).await??;
         Ok(())
     }
 }
@@ -59,7 +59,7 @@ pub async fn merge_slices(slice_dir: &Path) -> Result<Option<MergedFile>> {
         return Ok(None);
     }
 
-    tokio::task::spawn_blocking(move || {
+    spawn_blocking(move || {
         let mut dst_file = NamedTempFile::new()?;
         for slice in slices {
             let mut data = vec![];
@@ -152,27 +152,45 @@ macro_rules! nx_is_ok {
     }};
 }
 
+/// delete a file or directory if exists
 pub async fn delete(path: &Path) -> Result<()> {
-    let meta = nx_is_ok!(fs::metadata(&path).await);
+    let path = path.to_owned();
+    spawn_blocking(move || delete_inner(&path)).await??;
+    Ok(())
+}
+
+fn delete_inner(path: &Path) -> Result<()> {
+    use std::fs;
+
+    let meta = nx_is_ok!(fs::metadata(&path));
     if meta.is_file() {
-        fs::remove_file(path).await.ignore_nx()?;
+        fs::remove_file(path).ignore_nx()?;
     } else {
-        fs::remove_dir_all(path).await.ignore_nx()?;
+        fs::remove_dir_all(path).ignore_nx()?;
     }
     Ok(())
 }
 
+/// link file only
 pub async fn create_user_link(src: &Path, owner: &VirtualPath) -> Result<()> {
     let owner = PathManager::virtual_to_disk(owner);
 
-    delete(&owner).await?;
+    let src = src.to_owned();
+    spawn_blocking(move || create_file_link(&src, &owner)).await??;
+
+    Ok(())
+}
+
+fn create_file_link(src: &Path, owner: &Path) -> Result<()> {
+    delete_inner(&owner)?;
 
     debug!(?src, ?owner, "creating user link");
+
     #[cfg(target_family = "unix")]
-    fs::symlink(&src, owner).await?;
+    std::os::unix::fs::symlink(&src, owner)?;
 
     #[cfg(target_family = "windows")]
-    fs::symlink_file(&src, owner).await?;
+    std::os::windows::fs::symlink_file(&src, owner)?;
 
     Ok(())
 }
@@ -195,9 +213,33 @@ pub(crate) async fn virtual_move(from: &VirtualPath, to: &VirtualPath) -> Result
     Ok(())
 }
 
-pub(crate) async fn virtual_copy(from: &VirtualPath, to: &VirtualPath) -> Result<()> {
+pub async fn virtual_copy(from: &VirtualPath, to: &VirtualPath) -> Result<()> {
     let from = PathManager::virtual_to_disk(from);
     let to = PathManager::virtual_to_disk(to);
-    fs::copy(from, to).await?;
+
+    delete(&to).await?;
+    spawn_blocking(move || copy_dir_all(&from, &to)).await??;
+
+    Ok(())
+}
+
+fn copy_dir_all(src: &Path, dst: &Path) -> Result<()> {
+    use std::fs;
+
+    let meta = fs::symlink_metadata(src).or_else(|_err| std::fs::metadata(src))?;
+    if meta.is_dir() {
+        let dir = fs::read_dir(src)?;
+        fs::create_dir(dst)?;
+        for entry in dir {
+            let entry = entry?;
+            copy_dir_all(&entry.path(), &dst.join(entry.file_name()))?;
+        }
+    } else if meta.is_symlink() {
+        let src = fs::read_link(src)?;
+        create_file_link(&src, dst)?;
+    } else {
+        warn!(?src, ?dst, "copying file");
+        fs::copy(src, dst)?;
+    }
     Ok(())
 }
