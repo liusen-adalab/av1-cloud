@@ -97,6 +97,23 @@ impl FileNode {
         root
     }
 
+    pub fn sort_by_name(&mut self) {
+        if let FileType::Dir(dir) = &mut self.file_type {
+            dir.sort_by(|a, b| {
+                if a.path().is_source() {
+                    return std::cmp::Ordering::Less;
+                }
+                if a.path().is_encoded() {
+                    return std::cmp::Ordering::Greater;
+                }
+                a.file_name().cmp(b.file_name())
+            });
+            for node in dir {
+                node.sort_by_name();
+            }
+        }
+    }
+
     fn new_dir(user_id: UserId, path: VirtualPath) -> Self {
         Self {
             id: UserFileId::next_id(),
@@ -306,6 +323,14 @@ impl VirtualPath {
         }
     }
 
+    fn is_source(&self) -> bool {
+        self.path == Path::new(Self::SOURCE_DIR_PATH)
+    }
+
+    fn is_encoded(&self) -> bool {
+        self.path == Path::new(Self::ENCODED_DIR_PATH)
+    }
+
     fn is_fix_path(path: &Path) -> bool {
         let is_root = path == Path::new("/");
         let is_source = path == Path::new(Self::SOURCE_DIR_PATH);
@@ -510,6 +535,15 @@ pub mod convert {
         }
 
         pub fn po_to_do(po: FileNodePo) -> anyhow::Result<FileNode> {
+            let mut node = Self::po_to_do_inner(po)?;
+            node.sort_by_name();
+
+            tracing::info!("load tree outter: {:#?}", node);
+
+            Ok(node)
+        }
+
+        pub fn po_to_do_inner(po: FileNodePo) -> anyhow::Result<FileNode> {
             let FileNodePo {
                 user_file,
                 file_type,
@@ -544,15 +578,15 @@ pub mod convert {
                     crate::domain::file_system::file::FileType::Dir(children)
                 }
             };
-
-            Ok(FileNode {
+            let node = FileNode {
                 id,
                 parent_id,
                 user_id,
                 path,
                 deleted,
                 file_type,
-            })
+            };
+            Ok(node)
         }
 
         pub fn sys_file_po_to_do(po: SysFilePo) -> FileNodeMetaData {
@@ -587,6 +621,40 @@ pub mod convert {
 #[cfg(test)]
 mod test {
     use super::*;
+
+    #[test]
+    #[tracing_test::traced_test]
+    fn t_sort_by_name() {
+        let home = &mut FileNode::user_home(1.into());
+        test_user_home(home);
+        let [resource, encoded] = home.children_mut().unwrap().as_slice() else {
+            panic!("invalid user home");
+        };
+        assert_eq!(resource.file_name(), "源视频");
+        assert_eq!(encoded.file_name(), "已转码视频");
+        home.sort_by_name();
+        let [resource, encoded] = home.children_mut().unwrap().as_slice() else {
+            panic!("invalid user home");
+        };
+        assert_eq!(resource.file_name(), "源视频");
+        assert_eq!(encoded.file_name(), "已转码视频");
+
+        let children = home.children_mut().unwrap();
+        let resource = children.remove(0);
+        children.push(resource);
+        let [encoded, resource] = children.as_slice() else {
+            panic!("invalid user home");
+        };
+        assert_eq!(encoded.file_name(), "已转码视频");
+        assert_eq!(resource.file_name(), "源视频");
+
+        home.sort_by_name();
+        let [resource, encoded] = home.children_mut().unwrap().as_slice() else {
+            panic!("invalid user home");
+        };
+        assert_eq!(resource.file_name(), "源视频");
+        assert_eq!(encoded.file_name(), "已转码视频");
+    }
 
     #[test]
     fn test_increase_file_name() {

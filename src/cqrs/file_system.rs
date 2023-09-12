@@ -148,10 +148,17 @@ impl DirContent {
         let idx = files.iter().position(|f| f.is_dir);
         let dirs: Vec<_> = files.drain(idx.unwrap_or(files.len())..).collect();
 
-        Ok(Some(Self {
+        let mut dir = Self {
             total: total as u64,
             dirs,
             files,
-        }))
+        };
+        dir.sort_by_name();
+        Ok(Some(dir))
+    }
+
+    fn sort_by_name(&mut self) {
+        self.dirs.sort_by(|a, b| a.file_name.cmp(&b.file_name));
+        self.files.sort_by(|a, b| a.file_name.cmp(&b.file_name));
     }
 }
