@@ -167,21 +167,19 @@ impl FileNode {
             deleted: false,
             file_type,
         };
-        if let FileType::Dir(children) = &mut self.file_type {
-            loop {
-                let exist = children.iter().any(|ch| ch.path == child.path);
-                if exist {
-                    child.path.increase_file_name()?;
-                } else {
-                    break;
-                }
-            }
 
-            children.push(child);
-            Ok(children.last_mut().unwrap())
-        } else {
-            Err(ParentNotDir)
+        let children = self.children_mut_inner()?;
+        loop {
+            let exist = children.iter().any(|ch| ch.path == child.path);
+            if exist {
+                child.path.increase_file_name()?;
+            } else {
+                break;
+            }
         }
+        children.push(child);
+
+        Ok(children.last_mut().unwrap())
     }
 
     pub fn all_paths(&self) -> Vec<&VirtualPath> {
@@ -270,18 +268,26 @@ impl FileNode {
     }
 
     pub(crate) fn children(&self) -> Option<&Vec<Self>> {
-        if let FileType::Dir(dir) = &self.file_type {
-            Some(dir)
-        } else {
-            None
-        }
+        self.children_inner().ok()
     }
 
     pub(crate) fn children_mut(&mut self) -> Option<&mut Vec<Self>> {
-        if let FileType::Dir(dir) = &mut self.file_type {
-            Some(dir)
+        self.children_mut_inner().ok()
+    }
+
+    fn children_inner(&self) -> Result<&Vec<FileNode>, FileOperateErr> {
+        if let FileType::Dir(children) = &self.file_type {
+            Ok(children)
         } else {
-            None
+            Err(ParentNotDir)
+        }
+    }
+
+    fn children_mut_inner(&mut self) -> Result<&mut Vec<FileNode>, FileOperateErr> {
+        if let FileType::Dir(children) = &mut self.file_type {
+            Ok(children)
+        } else {
+            Err(ParentNotDir)
         }
     }
 }
@@ -292,6 +298,7 @@ pub enum VirtualPathErr {
     NotAllowed,
     BadFileName,
     TooLong,
+    MustAbsolute,
 }
 use VirtualPathErr::*;
 
@@ -348,10 +355,6 @@ impl VirtualPath {
         let is_decendant_of_encoded = self.path.starts_with(Self::ENCODED_DIR_PATH);
         is_decendant_of_source || is_decendant_of_encoded
     }
-
-    pub(crate) fn to_string(&self) -> String {
-        self.path.to_string_lossy().into_owned()
-    }
 }
 
 impl VirtualPath {
@@ -381,12 +384,11 @@ impl VirtualPath {
     where
         PathBuf: From<P>,
     {
-        use VirtualPathErr::*;
-
         let path = PathBuf::from(path);
 
         // only check format
         ensure_ok!(path.file_name().unwrap_or_default().len() < 255, TooLong);
+        ensure_ok!(path.starts_with("/"), MustAbsolute);
 
         Ok(Self { user_id, path })
     }
@@ -415,7 +417,7 @@ impl VirtualPath {
     }
 
     // 只允许在 /源视频 或 /已转码视频 下的文件修改文件名
-    pub fn increase_file_name(&mut self) -> Result<(), VirtualPathErr> {
+    fn increase_file_name(&mut self) -> Result<(), VirtualPathErr> {
         ensure_ok!(self.allow_modified(), NotAllowed);
 
         let stem = self.path.file_stem().unwrap().to_str().unwrap();
@@ -446,7 +448,7 @@ impl VirtualPath {
             .unwrap()
     }
 
-    pub fn rename(&self, new_name: &str) -> Result<Self, VirtualPathErr> {
+    fn rename(&self, new_name: &str) -> Result<Self, VirtualPathErr> {
         let mut path = self.path.clone();
         path.set_file_name(new_name);
 

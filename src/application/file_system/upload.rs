@@ -109,7 +109,7 @@ impl UploadTaskDto {
             hash: task.hash().to_string(),
             file_name: task.path().file_name().to_string(),
             uploaded_slices: task.uploaded_slices().clone(),
-            dst_path: task.path().to_string(),
+            dst_path: task.path().to_str().into_owned(),
         }
     }
 }
@@ -227,7 +227,7 @@ pub async fn upload_finished_tx(
     task.finished(*file.id());
     repo_upload_task::update(&task).await?;
 
-    // 确保前面的操作都成功后，再执行清理操作
+    // 确保前面的操作都成功后，异步执行清理操作
     tokio::spawn(async move {
         let slice_dir = path_manager().upload_slice_dir(*task.id());
         log_if_err!(file_sys::delete(&slice_dir).await);

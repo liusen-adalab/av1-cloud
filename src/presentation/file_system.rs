@@ -39,6 +39,7 @@ code! {
         not_allow = "不允许的路径格式",
         bad_file_name = "文件名不合法",
         too_long = "路径过长",
+        must_absolute = "必须是绝对路径",
     }
 
     ---
@@ -117,6 +118,7 @@ impl From<VirtualPathErr> for ApiError {
             VirtualPathErr::NotAllowed => PATH_FORMAT.not_allow.into(),
             VirtualPathErr::BadFileName => PATH_FORMAT.bad_file_name.into(),
             VirtualPathErr::TooLong => PATH_FORMAT.too_long.into(),
+            VirtualPathErr::MustAbsolute => PATH_FORMAT.must_absolute.into(),
         }
     }
 }

@@ -164,6 +164,8 @@ pub async fn save_node(node: &FileNode, conn: &mut PgConn) -> Result<EffectedRow
         .collect();
     diesel::insert_into(sys_files::table)
         .values(&s_files)
+        .on_conflict(sys_files::hash)
+        .do_nothing()
         .execute(conn)
         .await?;
 
