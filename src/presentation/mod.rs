@@ -10,6 +10,7 @@ pub mod file_system;
 pub mod user;
 
 #[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct StatusCode {
     code: u32,
     msg: &'static str,

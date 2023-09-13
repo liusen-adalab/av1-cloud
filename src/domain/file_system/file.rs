@@ -348,6 +348,10 @@ impl VirtualPath {
         let is_decendant_of_encoded = self.path.starts_with(Self::ENCODED_DIR_PATH);
         is_decendant_of_source || is_decendant_of_encoded
     }
+
+    pub(crate) fn to_string(&self) -> String {
+        self.path.to_string_lossy().into_owned()
+    }
 }
 
 impl VirtualPath {

@@ -161,6 +161,7 @@ struct CreateDirDto {
 }
 
 #[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 struct CreateDirResp {
     pub file_id: UserFileId,
 }

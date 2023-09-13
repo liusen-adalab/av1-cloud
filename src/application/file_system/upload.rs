@@ -37,6 +37,7 @@ pub enum RegisterUploadTaskErr {
 }
 
 #[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct RegisterUploadTaskResp {
     pub task_id: UploadTaskId,
     pub hash_existed: bool,
@@ -92,11 +93,13 @@ pub async fn register_upload_task(
 }
 
 #[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct UploadTaskDto {
     id: UploadTaskId,
     hash: String,
     file_name: String,
     uploaded_slices: HashSet<u32>,
+    dst_path: String,
 }
 
 impl UploadTaskDto {
@@ -106,6 +109,7 @@ impl UploadTaskDto {
             hash: task.hash().to_string(),
             file_name: task.path().file_name().to_string(),
             uploaded_slices: task.uploaded_slices().clone(),
+            dst_path: task.path().to_string(),
         }
     }
 }
@@ -163,6 +167,7 @@ pub async fn store_slice(
 }
 
 #[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct UploadedUserFile {
     new_name: Option<String>,
     file_id: String,

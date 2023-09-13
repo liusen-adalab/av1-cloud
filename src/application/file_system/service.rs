@@ -19,6 +19,7 @@ use tracing::debug;
 use utils::db_pools::postgres::{pg_conn, PgConn};
 
 #[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct DirTree {
     pub id: UserFileId,
     pub name: String,
