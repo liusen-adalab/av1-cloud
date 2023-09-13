@@ -45,7 +45,16 @@ pub struct MergedFile {
 impl MergedFile {
     pub async fn persist(self, path: &Path) -> Result<()> {
         let path = path.to_owned();
-        spawn_blocking(move || self.tmp_file.persist(path)).await??;
+        spawn_blocking(move || -> Result<()> {
+            let tmp_file = self.tmp_file.path();
+
+            // NamedTempFile 和 path 不在同一个文件系统，不能直接 rename
+            // NamedTempFile 会在 drop 时自动删除
+            std::fs::copy(tmp_file, path)?;
+
+            Ok(())
+        })
+        .await??;
         Ok(())
     }
 }
