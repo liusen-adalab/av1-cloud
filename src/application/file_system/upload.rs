@@ -127,17 +127,26 @@ pub async fn get_upload_tasks(tasks: HashSet<UploadTaskId>) -> anyhow::Result<Ve
     Ok(task_dto_s)
 }
 
-pub async fn clear_upload_tasks(tasks: Vec<UploadTaskId>) -> anyhow::Result<()> {
+pub async fn clear_upload_tasks(tasks: HashSet<UploadTaskId>) -> anyhow::Result<()> {
     for task_id in tasks {
         let Some(task) = repo_upload_task::find(task_id).await? else {
             warn!(%task_id, "upload task not found");
             continue;
         };
-        let slice_dir = path_manager().upload_slice_dir(*task.id());
         repo_upload_task::delete(task_id).await?;
-        file_sys::delete(&slice_dir).await?;
+        task_clear_bg(task);
     }
     Ok(())
+}
+
+fn task_clear_bg(task: UploadTask) {
+    let clear_process = async move {
+        let slice_dir = path_manager().upload_slice_dir(*task.id());
+        file_sys::delete(&slice_dir).await?;
+
+        anyhow::Ok(())
+    };
+    tokio::spawn(async move { log_if_err!(clear_process.await) });
 }
 
 pub enum StoreSliceErr {
@@ -228,10 +237,7 @@ pub async fn upload_finished_tx(
     repo_upload_task::update(&task).await?;
 
     // 确保前面的操作都成功后，异步执行清理操作
-    tokio::spawn(async move {
-        let slice_dir = path_manager().upload_slice_dir(*task.id());
-        log_if_err!(file_sys::delete(&slice_dir).await);
-    });
+    task_clear_bg(task);
 
     biz_ok!(UploadedUserFile {
         new_name,

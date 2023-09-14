@@ -136,10 +136,16 @@ pub fn actix_config(cfg: &mut web::ServiceConfig) {
             .service(web::resource("/copy").route(web::post().to(copy)))
             .service(web::resource("/move").route(web::post().to(move_to)))
             .service(web::resource("/rename").route(web::post().to(rename)))
+            // upload
             .service(
                 web::resource("/register_upload_task").route(web::post().to(register_upload_task)),
             )
-            .service(web::resource("/upload_tasks").route(web::get().to(get_upload_task)))
+            .service(web::resource("/del_upload_task").route(web::post().to(del_upload_task)))
+            .service(
+                web::resource("/upload_tasks")
+                    .route(web::get().to(get_upload_tasks))
+                    .route(web::delete().to(clear_upload_tasks)),
+            )
             .service(
                 web::resource("/upload_slice")
                     .app_data(m_limit)
@@ -192,7 +198,7 @@ async fn register_upload_task(
     ApiResponse::Ok(resp)
 }
 
-async fn get_upload_task(_id: Identity, req: HttpRequest) -> JsonResponse<Vec<UploadTaskDto>> {
+async fn get_upload_tasks(_id: Identity, req: HttpRequest) -> JsonResponse<Vec<UploadTaskDto>> {
     let ss = req.get_session();
     let tasks: Option<HashSet<UploadTaskId>> = ss.get(UPLOAD_TASKS)?;
     let Some(tasks) = tasks else {
@@ -201,6 +207,47 @@ async fn get_upload_task(_id: Identity, req: HttpRequest) -> JsonResponse<Vec<Up
 
     let resp = upload::get_upload_tasks(tasks).await?;
     ApiResponse::Ok(resp)
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DelUplodTask {
+    task_id: UploadTaskId,
+}
+
+async fn del_upload_task(
+    _id: Identity,
+    params: Json<DelUplodTask>,
+    req: HttpRequest,
+) -> JsonResponse<()> {
+    let DelUplodTask { task_id } = params.into_inner();
+
+    upload::clear_upload_tasks(HashSet::from_iter(vec![task_id])).await?;
+    del_session_upload_task(task_id, req)?;
+
+    ApiResponse::Ok(())
+}
+
+fn del_session_upload_task(task_id: UploadTaskId, req: HttpRequest) -> anyhow::Result<()> {
+    let session = req.get_session();
+    let tasks: Option<HashSet<UploadTaskId>> = session.get(UPLOAD_TASKS)?;
+    if let Some(mut tasks) = tasks {
+        tasks.remove(&task_id);
+        session.insert(UPLOAD_TASKS, tasks)?;
+    };
+
+    Ok(())
+}
+
+async fn clear_upload_tasks(_id: Identity, req: HttpRequest) -> JsonResponse<()> {
+    let ss = req.get_session();
+    let tasks: Option<HashSet<UploadTaskId>> = ss.get(UPLOAD_TASKS)?;
+    let Some(tasks) = tasks else {
+        return ApiResponse::Ok(Default::default());
+    };
+    ss.remove(UPLOAD_TASKS);
+    upload::clear_upload_tasks(tasks).await?;
+    ApiResponse::Ok(())
 }
 
 #[derive(MultipartForm)]
@@ -228,8 +275,13 @@ struct UploadFinishedParam {
 async fn upload_finished(
     _id: Identity,
     params: Json<UploadFinishedParam>,
+    http_req: HttpRequest,
 ) -> JsonResponse<UploadedUserFile> {
-    let resp = upload::upload_finished(params.into_inner().task_id).await??;
+    let UploadFinishedParam { task_id } = params.into_inner();
+    let resp = upload::upload_finished(task_id).await??;
+
+    del_session_upload_task(task_id, http_req)?;
+
     ApiResponse::Ok(resp)
 }
 
