@@ -33,6 +33,7 @@ code! {
         already_exist = "文件已存在",
         parent_not_found = "父文件不存在",
         parent_not_dir = "父文件不是目录",
+        recursived = "不能移动或复制到子目录",
     }
 
     pub PathFormat = 210 {
@@ -107,6 +108,7 @@ impl From<FileOperateErr> for ApiError {
             FileOperateErr::AlreadyExist => FILE_OPERATE.already_exist.into(),
             FileOperateErr::ParentNotDir => FILE_OPERATE.parent_not_dir.into(),
             FileOperateErr::NoParent => FILE_OPERATE.parent_not_found.into(),
+            FileOperateErr::Recursived => FILE_OPERATE.recursived.into(),
             FileOperateErr::Path(p) => p.into(),
         }
     }

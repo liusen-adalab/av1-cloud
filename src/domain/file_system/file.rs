@@ -72,6 +72,7 @@ impl FileNodeMetaData {
 
 #[derive(From, Debug, PartialEq, Eq)]
 pub enum FileOperateErr {
+    Recursived,
     AlreadyDeleted,
     NotFound,
     AlreadyExist,
@@ -216,6 +217,8 @@ impl FileNode {
         let FileType::Dir(children) = &mut new_parent.file_type else {
             return Err(ParentNotDir);
         };
+        ensure_ok!(!self.path.is_ancestor_of(&new_parent.path), Recursived);
+
         let new_path = new_parent.path.join_child(self.file_name())?;
         let existed = children.iter().any(|ch| ch.path == new_path);
         ensure_ok!(!existed, AlreadyExist);
@@ -354,6 +357,10 @@ impl VirtualPath {
         let is_decendant_of_source = self.path.starts_with(Self::SOURCE_DIR_PATH);
         let is_decendant_of_encoded = self.path.starts_with(Self::ENCODED_DIR_PATH);
         is_decendant_of_source || is_decendant_of_encoded
+    }
+
+    fn is_ancestor_of(&self, other: &Self) -> bool {
+        other.path.ancestors().any(|p| p == self.path)
     }
 }
 
@@ -797,7 +804,10 @@ mod test {
         let mut home = FileNode::user_home(1.into());
         let (aa, bb) = test_user_home(&mut home);
 
+        let aa_clone = aa.clone();
         let aacc = aa.create_dir("cc").unwrap();
+
+        assert_eq!(aa_clone.copy_to(aacc).unwrap_err(), Recursived);
 
         let aacc_id = aacc.id;
         assert_eq!(aacc.path().to_str(), "/源视频/aa/cc");
