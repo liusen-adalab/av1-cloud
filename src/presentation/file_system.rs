@@ -5,7 +5,7 @@ use actix_multipart::form::bytes::Bytes;
 use actix_multipart::form::text::Text;
 use actix_multipart::form::{MultipartForm, MultipartFormConfig};
 use actix_session::SessionExt;
-use actix_web::web::{self, Json};
+use actix_web::web::{self, Json, Query};
 use actix_web::HttpRequest;
 use serde::{Deserialize, Serialize};
 use utils::code;
@@ -148,11 +148,32 @@ pub fn actix_config(cfg: &mut web::ServiceConfig) {
             )
             .service(
                 web::resource("/upload_slice")
-                    .app_data(m_limit)
+                    .app_data(m_limit.clone())
                     .route(web::post().to(upload_slice)),
             )
             .service(web::resource("/finish_upload").route(web::post().to(upload_finished))),
+    )
+    .service(
+        web::scope("/admin/fs")
+            .service(web::resource("/doc").route(web::get().to(biz_status_doc)))
+            .service(web::resource("/home").route(web::get().to(load_home_admin)))
+            .service(web::resource("/create_dir").route(web::post().to(create_dir_admin)))
+            .service(web::resource("/delete").route(web::post().to(delete_admin)))
+            .service(web::resource("/copy").route(web::post().to(copy_admin)))
+            .service(web::resource("/move").route(web::post().to(move_to_admin)))
+            .service(web::resource("/rename").route(web::post().to(rename_admin))),
     );
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct LoadHomeParams {
+    user_id: UserId,
+}
+
+async fn load_home_admin(_id: Identity, params: Query<LoadHomeParams>) -> JsonResponse<DirTree> {
+    let tree = service::load_home(params.user_id).await?;
+    ApiResponse::Ok(tree)
 }
 
 async fn load_home(id: Identity) -> JsonResponse<DirTree> {
@@ -166,6 +187,26 @@ async fn load_home(id: Identity) -> JsonResponse<DirTree> {
 struct CreateDirDto {
     pub parent_id: UserFileId,
     pub name: String,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct AdminParams<T> {
+    user_id: UserId,
+    #[serde(flatten)]
+    params: T,
+}
+
+async fn create_dir_admin(
+    _id: Identity,
+    params: Json<AdminParams<CreateDirDto>>,
+) -> JsonResponse<CreateDirResp> {
+    let AdminParams {
+        user_id,
+        params: CreateDirDto { parent_id, name },
+    } = params.into_inner();
+    let file_id = service::create_dir(user_id, parent_id, &name).await??;
+    ApiResponse::Ok(CreateDirResp { file_id })
 }
 
 #[derive(Serialize)]
@@ -298,6 +339,15 @@ async fn delete(id: Identity, params: Json<DeleteDto>) -> JsonResponse<()> {
     ApiResponse::Ok(())
 }
 
+async fn delete_admin(_id: Identity, params: Json<AdminParams<DeleteDto>>) -> JsonResponse<()> {
+    let AdminParams {
+        user_id,
+        params: DeleteDto { file_ids },
+    } = params.into_inner();
+    service::delete(user_id, file_ids).await??;
+    ApiResponse::Ok(())
+}
+
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct MoveToParams {
@@ -312,10 +362,28 @@ async fn copy(id: Identity, params: Json<MoveToParams>) -> JsonResponse<()> {
     ApiResponse::Ok(())
 }
 
+async fn copy_admin(_id: Identity, params: Json<AdminParams<MoveToParams>>) -> JsonResponse<()> {
+    let AdminParams {
+        user_id,
+        params: MoveToParams { from, to },
+    } = params.into_inner();
+    service::copy_to(user_id, from, to).await??;
+    ApiResponse::Ok(())
+}
+
 async fn move_to(id: Identity, params: Json<MoveToParams>) -> JsonResponse<()> {
     let id = id.id()?.parse::<UserId>()?;
     let MoveToParams { from, to } = params.into_inner();
     service::move_to(id, from, to).await??;
+    ApiResponse::Ok(())
+}
+
+async fn move_to_admin(_id: Identity, params: Json<AdminParams<MoveToParams>>) -> JsonResponse<()> {
+    let AdminParams {
+        user_id,
+        params: MoveToParams { from, to },
+    } = params.into_inner();
+    service::move_to(user_id, from, to).await??;
     ApiResponse::Ok(())
 }
 
@@ -330,5 +398,14 @@ async fn rename(id: Identity, params: Json<RenameParams>) -> JsonResponse<()> {
     let id = id.id()?.parse::<UserId>()?;
     let RenameParams { file_id, new_name } = params.into_inner();
     service::rename(id, file_id, &new_name).await??;
+    ApiResponse::Ok(())
+}
+
+async fn rename_admin(_id: Identity, params: Json<AdminParams<RenameParams>>) -> JsonResponse<()> {
+    let AdminParams {
+        user_id,
+        params: RenameParams { file_id, new_name },
+    } = params.into_inner();
+    service::rename(user_id, file_id, &new_name).await??;
     ApiResponse::Ok(())
 }
