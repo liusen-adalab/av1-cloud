@@ -1,5 +1,6 @@
 use std::collections::HashSet;
 
+use anyhow::Context;
 use derive_more::From;
 use serde::{Deserialize, Serialize};
 use tracing::warn;
@@ -12,6 +13,7 @@ use crate::domain::file_system::file::FileOperateErr;
 use crate::domain::file_system::file::UserFileId;
 use crate::domain::file_system::service_upload;
 use crate::domain::file_system::service_upload::UploadTaskId;
+use crate::infrastructure::av1_factory;
 use crate::pg_tx;
 use crate::{
     biz_ok,
@@ -214,11 +216,15 @@ pub async fn upload_finished_tx(
     }
 
     // load parent
-    let id = (*task.user_id(), *task.parent_dir_id());
-    let mut parent = ensure_exist!(repo_user_file::load_tree_dep2(id, conn).await?, NoParent);
+    let parent_id = (*task.user_id(), *task.parent_dir_id());
+    let mut parent = ensure_exist!(
+        repo_user_file::load_tree_dep2(parent_id, conn).await?,
+        NoParent
+    );
 
     // generate user file
     let file_data = ensure_biz!(load_sys_file(&task).await?);
+    let sys_file_id = *file_data.id();
     let file_data_path = file_data.archived_path().clone();
     let file = ensure_biz!(parent.create_file(&task.path().file_name(), file_data));
 
@@ -230,6 +236,14 @@ pub async fn upload_finished_tx(
 
     // 为用户创建文件软链接
     file_sys::create_user_link(&file_data_path, file.path()).await?;
+
+    // 发送信息采集的请求
+    // FIXME: 为了不影响正常的流程，暂时异步请求
+    tokio::spawn(async move {
+        log_if_err!(av1_factory::parse_file(sys_file_id, &file_data_path)
+            .await
+            .context("send parse req"));
+    });
 
     // 更新 task 状态，必须是最后一个可能失败的操作
     let mut task = task;

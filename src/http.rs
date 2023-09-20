@@ -191,7 +191,7 @@ macro_rules! request {
 
     (@config $req:expr, body: $body:expr $(,)?) => {{
         let req = $req.body($body);
-        crate::request!(@do_post, req)
+        crate::request!(@do_request, req)
     }};
 
     (@config $req:expr, body: $body:expr, $($tts:tt)+) => {{

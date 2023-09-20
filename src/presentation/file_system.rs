@@ -8,6 +8,7 @@ use actix_session::SessionExt;
 use actix_web::web::{self, Json, Query};
 use actix_web::HttpRequest;
 use serde::{Deserialize, Serialize};
+use tracing::{debug, warn};
 use utils::code;
 
 use crate::application::file_system::service::{self, DirTree};
@@ -15,6 +16,7 @@ use crate::application::file_system::upload::{
     self, FinishUploadTaskErr, RegisterUploadTaskDto, RegisterUploadTaskErr,
     RegisterUploadTaskResp, StoreSliceErr, UploadTaskDto, UploadedUserFile,
 };
+use crate::application::file_system::video_info;
 use crate::domain::file_system::file::{FileOperateErr, UserFileId, VirtualPathErr};
 use crate::domain::file_system::service_upload::UploadTaskId;
 use crate::domain::user::user::UserId;
@@ -153,7 +155,8 @@ pub fn actix_config(cfg: &mut web::ServiceConfig) {
                     .app_data(m_limit.clone())
                     .route(web::post().to(upload_slice)),
             )
-            .service(web::resource("/finish_upload").route(web::post().to(upload_finished))),
+            .service(web::resource("/finish_upload").route(web::post().to(upload_finished)))
+            .service(web::resource("/file_parsed").route(web::post().to(file_parsed))),
     )
     .service(
         web::scope("/admin/fs")
@@ -409,5 +412,31 @@ async fn rename_admin(_id: Identity, params: Json<AdminParams<RenameParams>>) ->
         params: RenameParams { file_id, new_name },
     } = params.into_inner();
     service::rename(user_id, file_id, &new_name).await??;
+    ApiResponse::Ok(())
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct TaskResult<O> {
+    pub task_id: i64,
+    pub file_id: i64,
+    pub result: Result<O, String>,
+}
+
+async fn file_parsed(params: Json<TaskResult<Option<String>>>) -> JsonResponse<()> {
+    let TaskResult {
+        task_id: _,
+        file_id,
+        result,
+    } = params.into_inner();
+    debug!(?result, "video parsed");
+
+    match result {
+        Ok(ok) => {
+            video_info::file_parsed(file_id.into(), ok).await?;
+        }
+        Err(err) => {
+            warn!(%err, "parse video failed");
+        }
+    }
     ApiResponse::Ok(())
 }

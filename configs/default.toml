@@ -23,6 +23,9 @@ max_conn = 20
 [file_system]
 root_dir = "C:/workspace/av1-cloud/dev-keydb/dev-fs-root"
 
+[av1_factory]
+endpoint = "http://127.0.0.1:8993"
+
 [email_code]
 from_full = "test <test@orientphoenix.com>"
 from_addr = "test@orientphoenix.com"

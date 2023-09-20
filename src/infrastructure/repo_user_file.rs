@@ -1,6 +1,7 @@
 use std::borrow::Cow;
 
 use crate::{
+    application::file_system::video_info::MediaInfo,
     domain::{
         file_system::file::{
             convert::FileNodeConverter, FileNode, FileNodeMetaData, SysFileId, UserFileId,
@@ -347,4 +348,60 @@ pub(crate) async fn update(node: &FileNode, conn: &mut PgConn) -> Result<Effecte
         effected_row: effected_total,
         expect_row: u_files.len(),
     })
+}
+
+pub async fn update_file_matedata(
+    file_id: SysFileId,
+    video_parsed: Option<MediaInfo>,
+) -> Result<()> {
+    let Some(video_parsed) = video_parsed else {
+        let conn = &mut pg_conn().await?;
+        diesel::update(dsl::sys_files)
+            .filter(dsl::id.eq(file_id))
+            .set((
+                dsl::is_video.eq(false),
+                dsl::can_be_encode.eq(false),
+            ))
+            .execute(conn);
+        return Ok(());
+    };
+
+    let g_bytes = serde_json::to_string(&video_parsed.general).unwrap();
+    let v_bytes = serde_json::to_string(&video_parsed.video).unwrap();
+    let a_bytes = video_parsed
+        .audio
+        .as_ref()
+        .map(|a| serde_json::to_string(a).unwrap());
+
+    let bit_rate = video_parsed.video.BitRate.map(|b| b as i32);
+    let duration_ms = video_parsed.video.durationMs.map(|b| b as i32);
+
+    let frame_count = video_parsed.video.FrameCount.map(|i| i as i32);
+    let width = video_parsed.video.Width.map(|i| i as i32);
+    let height = video_parsed.video.Height.map(|i| i as i32);
+
+    let format = &video_parsed.video.Format;
+    let is_format_unsupport = format.is_none();
+    let can_be_encode =
+        frame_count.is_some() && width.is_some() && height.is_some() && !is_format_unsupport;
+
+    use sys_files::dsl;
+
+    let conn = &mut pg_conn().await?;
+    diesel::update(dsl::sys_files)
+        .filter(dsl::id.eq(file_id))
+        .set((
+            dsl::general_info.eq(g_bytes),
+            dsl::video_info.eq(v_bytes),
+            dsl::audio_info.eq(a_bytes),
+            dsl::is_video.eq(true),
+            dsl::bit_rate.eq(bit_rate),
+            dsl::duration_ms.eq(duration_ms),
+            dsl::can_be_encode.eq(can_be_encode),
+            dsl::width.eq(width),
+            dsl::height.eq(height),
+        ))
+        .execute(conn)
+        .await?;
+    Ok(())
 }

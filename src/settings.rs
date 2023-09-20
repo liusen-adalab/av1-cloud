@@ -8,7 +8,10 @@ use clap::Parser;
 use config::Config;
 use serde::{Deserialize, Serialize};
 
-use crate::{application::file_system::FileSystemCfg, infrastructure::email::EmailCodeCfg};
+use crate::{
+    application::file_system::FileSystemCfg,
+    infrastructure::{av1_factory::Av1FactoryCfg, email::EmailCodeCfg},
+};
 
 #[derive(Deserialize, Debug)]
 pub struct Settings {
@@ -28,6 +31,8 @@ pub struct Settings {
     pub init_system: InitSystem,
 
     pub file_system: FileSystemCfg,
+
+    pub av1_factory: Av1FactoryCfg,
 }
 
 #[derive(Deserialize, Debug, Serialize)]

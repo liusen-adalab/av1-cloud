@@ -37,12 +37,63 @@ pub struct UserFile {
 /// 系统文件节点
 #[derive(SimpleObject, Debug, Queryable, Selectable)]
 #[diesel(table_name = sys_files)]
+#[graphql(complex)]
 pub struct FileData {
     id: SysFileId,
     /// 文件哈希
     pub hash: String,
     /// 文件大小（byte)
     pub size: i64,
+    /// 是否是视频文件
+    pub is_video: bool,
+    /// 转码自哪个文件
+    pub transcode_from: Option<i64>,
+    /// 是否可以转码
+    pub can_be_encode: Option<bool>,
+    /// 比特率
+    pub bit_rate: Option<i32>,
+    /// 时长（毫秒）
+    pub duration_ms: Option<i32>,
+    /// 高度
+    pub height: Option<i32>,
+    /// 宽度
+    pub width: Option<i32>,
+}
+
+#[ComplexObject]
+impl FileData {
+    async fn general_info(&self) -> Result<Option<serde_json::Value>> {
+        let mut conn = pg_conn().await?;
+        let info: Option<String> = sys_files::table
+            .filter(sys_files::id.eq(self.id))
+            .select(sys_files::general_info)
+            .first(&mut conn)
+            .await?;
+        let info = info.map(|info| serde_json::from_str(&info)).transpose()?;
+        Ok(info)
+    }
+
+    async fn video_info(&self) -> Result<Option<serde_json::Value>> {
+        let mut conn = pg_conn().await?;
+        let info: Option<String> = sys_files::table
+            .filter(sys_files::id.eq(self.id))
+            .select(sys_files::video_info)
+            .first(&mut conn)
+            .await?;
+        let info = info.map(|info| serde_json::from_str(&info)).transpose()?;
+        Ok(info)
+    }
+
+    async fn audio_info(&self) -> Result<Option<serde_json::Value>> {
+        let mut conn = pg_conn().await?;
+        let info: Option<String> = sys_files::table
+            .filter(sys_files::id.eq(self.id))
+            .select(sys_files::audio_info)
+            .first(&mut conn)
+            .await?;
+        let info = info.map(|info| serde_json::from_str(&info)).transpose()?;
+        Ok(info)
+    }
 }
 
 #[ComplexObject]

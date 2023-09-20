@@ -1,5 +1,6 @@
 use derive_more::Deref;
 
+pub mod av1_factory;
 pub mod email;
 pub mod file_sys;
 pub mod repo_employee;
