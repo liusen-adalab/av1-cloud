@@ -21,7 +21,7 @@ diesel::table! {
         hash -> Varchar,
         path -> Varchar,
         size -> Int8,
-        is_video -> Bool,
+        is_video -> Nullable<Bool>,
         transcode_from -> Nullable<Int8>,
         can_be_encode -> Nullable<Bool>,
         slice_count -> Nullable<Int4>,
@@ -67,9 +67,4 @@ diesel::table! {
     }
 }
 
-diesel::allow_tables_to_appear_in_same_query!(
-    employees,
-    sys_files,
-    user_files,
-    users,
-);
+diesel::allow_tables_to_appear_in_same_query!(employees, sys_files, user_files, users,);

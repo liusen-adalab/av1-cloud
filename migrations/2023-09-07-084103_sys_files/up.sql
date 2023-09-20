@@ -5,7 +5,7 @@ CREATE TABLE sys_files(
     path VARCHAR NOT NULL,
 
     size BIGINT NOT NULL,
-    is_video BOOLEAN NOT NULL,
+    is_video BOOLEAN,
     
     transcode_from BIGINT,
     

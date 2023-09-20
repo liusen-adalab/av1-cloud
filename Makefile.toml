@@ -21,6 +21,7 @@ done
 '''
 
 [tasks.reset]
+dependencies = ["sync"]
 script = { file = "./scripts/reset.sh" }
 
 [tasks.sync]

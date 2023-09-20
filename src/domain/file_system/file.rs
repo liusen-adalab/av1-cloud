@@ -528,7 +528,6 @@ pub mod convert {
                         size: meta.size as i64,
                         hash: Cow::Borrowed(&meta.hash),
                         path: meta.archived_path.to_string_lossy(),
-                        is_video: false,
                     };
 
                     v.push((default, Some(s)));

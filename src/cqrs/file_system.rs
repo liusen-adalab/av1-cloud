@@ -1,4 +1,4 @@
-use async_graphql::{ComplexObject, SimpleObject};
+use async_graphql::{ComplexObject, Enum, SimpleObject};
 use diesel::{prelude::Queryable, ExpressionMethods, QueryDsl, Selectable, SelectableHelper};
 use diesel_async::RunQueryDsl;
 use utils::db_pools::postgres::pg_conn;
@@ -45,7 +45,7 @@ pub struct FileData {
     /// 文件大小（byte)
     pub size: i64,
     /// 是否是视频文件
-    pub is_video: bool,
+    pub is_video: Option<bool>,
     /// 转码自哪个文件
     pub transcode_from: Option<i64>,
     /// 是否可以转码
@@ -60,8 +60,26 @@ pub struct FileData {
     pub width: Option<i32>,
 }
 
+#[derive(Enum, Copy, Clone, Eq, PartialEq, Debug)]
+pub enum FileType {
+    /// 未解析
+    UnParsed,
+    /// 视频
+    Video,
+    /// 普通文件
+    RegularFile,
+}
+
 #[ComplexObject]
 impl FileData {
+    async fn file_type(&self) -> Result<FileType> {
+        match self.is_video {
+            Some(true) => Ok(FileType::Video),
+            Some(false) => Ok(FileType::RegularFile),
+            None => Ok(FileType::UnParsed),
+        }
+    }
+
     async fn general_info(&self) -> Result<Option<serde_json::Value>> {
         let mut conn = pg_conn().await?;
         let info: Option<String> = sys_files::table

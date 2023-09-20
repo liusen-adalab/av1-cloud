@@ -49,7 +49,6 @@ pub struct SysFilePo<'a> {
     pub size: i64,
     pub hash: Cow<'a, str>,
     pub path: Cow<'a, str>,
-    pub is_video: bool,
 }
 
 pub struct FileNodePo<'a> {

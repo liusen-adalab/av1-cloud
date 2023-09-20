@@ -4,7 +4,7 @@ After=network.target
 
 [Service]
 Type=simple
-ExecStart=/usr/bin/av1-cloud --config /etc/av1-cloud/configs/release.toml --register-test-user
+ExecStart=/usr/local/bin/av1-cloud --config /etc/av1-cloud/configs/release.toml --register-test-user
 Restart=on-failure
 WorkingDirectory=/etc/av1-cloud/
 
