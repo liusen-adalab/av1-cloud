@@ -1,6 +1,7 @@
 use async_graphql::{ComplexObject, Enum, SimpleObject};
 use diesel::{prelude::Queryable, ExpressionMethods, QueryDsl, Selectable, SelectableHelper};
 use diesel_async::RunQueryDsl;
+use serde::Deserialize;
 use utils::db_pools::postgres::pg_conn;
 
 use crate::{
@@ -70,8 +71,25 @@ pub enum FileType {
     RegularFile,
 }
 
+#[derive(Enum, Clone, Copy, PartialEq, Eq)]
+pub enum CodecType {
+    #[graphql(name = "H264")]
+    H264,
+    #[graphql(name = "H265")]
+    H265,
+    #[graphql(name = "AV1")]
+    Av1,
+    #[graphql(name = "VP8")]
+    Vp8,
+    #[graphql(name = "VP9")]
+    Vp9,
+    /// 未支持
+    UNSUPPORTED,
+}
+
 #[ComplexObject]
 impl FileData {
+    /// 文件类型
     async fn file_type(&self) -> Result<FileType> {
         match self.is_video {
             Some(true) => Ok(FileType::Video),
@@ -80,7 +98,29 @@ impl FileData {
         }
     }
 
+    /// 视频文件通用信息
     async fn general_info(&self) -> Result<Option<serde_json::Value>> {
+        self.general_info_inner().await
+    }
+
+    /// 视频信息
+    async fn video_info(&self) -> Result<Option<serde_json::Value>> {
+        self.video_info_inner().await
+    }
+
+    /// 音频信息
+    async fn audio_info(&self) -> Result<Option<serde_json::Value>> {
+        self.audio_info_inner().await
+    }
+
+    /// 视频编码类型
+    async fn codec_type(&self) -> Result<Option<CodecType>> {
+        Ok(self.codec_type_inner().await?)
+    }
+}
+
+impl FileData {
+    async fn general_info_inner(&self) -> Result<Option<serde_json::Value>> {
         let mut conn = pg_conn().await?;
         let info: Option<String> = sys_files::table
             .filter(sys_files::id.eq(self.id))
@@ -91,7 +131,7 @@ impl FileData {
         Ok(info)
     }
 
-    async fn video_info(&self) -> Result<Option<serde_json::Value>> {
+    async fn video_info_inner(&self) -> Result<Option<serde_json::Value>> {
         let mut conn = pg_conn().await?;
         let info: Option<String> = sys_files::table
             .filter(sys_files::id.eq(self.id))
@@ -102,7 +142,7 @@ impl FileData {
         Ok(info)
     }
 
-    async fn audio_info(&self) -> Result<Option<serde_json::Value>> {
+    async fn audio_info_inner(&self) -> Result<Option<serde_json::Value>> {
         let mut conn = pg_conn().await?;
         let info: Option<String> = sys_files::table
             .filter(sys_files::id.eq(self.id))
@@ -111,6 +151,30 @@ impl FileData {
             .await?;
         let info = info.map(|info| serde_json::from_str(&info)).transpose()?;
         Ok(info)
+    }
+
+    async fn codec_type_inner(&self) -> Result<Option<CodecType>> {
+        #[allow(non_snake_case)]
+        #[derive(Deserialize, Debug)]
+        struct VideoInfo {
+            #[serde(default)]
+            Format: Option<String>,
+        }
+        let v_info = self.video_info_inner().await?;
+        let v_info: Option<VideoInfo> = v_info.map(|v| serde_json::from_value(v)).transpose()?;
+        let codec_type =
+            v_info
+                .and_then(|v| v.Format)
+                .map(|format| match format.to_lowercase().as_str() {
+                    "h264" | "avc" => CodecType::H264,
+                    "h265" | "hevc" => CodecType::H265,
+                    "av1" => CodecType::Av1,
+                    "vp8" => CodecType::Vp8,
+                    "vp9" => CodecType::Vp9,
+                    _ => CodecType::UNSUPPORTED,
+                });
+
+        Ok(codec_type)
     }
 }
 

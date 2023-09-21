@@ -1,4 +1,4 @@
-use std::borrow::Cow;
+use std::{borrow::Cow, time::Duration};
 
 use crate::{
     application::file_system::video_info::MediaInfo,
@@ -353,7 +353,7 @@ pub async fn update_file_matedata(
     file_id: SysFileId,
     video_parsed: Option<MediaInfo>,
 ) -> Result<()> {
-    let Some(video_parsed) = video_parsed else {
+    let Some(mut video_parsed) = video_parsed else {
         let conn = &mut pg_conn().await?;
         diesel::update(dsl::sys_files)
             .filter(dsl::id.eq(file_id))
@@ -364,6 +364,11 @@ pub async fn update_file_matedata(
             .execute(conn);
         return Ok(());
     };
+
+    video_parsed.video.durationMs = video_parsed
+        .video
+        .Duration
+        .map(|d| Duration::from_secs_f64(d).as_millis() as u32);
 
     let g_bytes = serde_json::to_string(&video_parsed.general).unwrap();
     let v_bytes = serde_json::to_string(&video_parsed.video).unwrap();
