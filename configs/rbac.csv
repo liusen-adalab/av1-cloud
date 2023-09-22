@@ -16,8 +16,6 @@ p, root, employee_data_group, (GET)|(POST)|(PUT)|(DELETE)
 # 只有 root 用户可以调用某些接口
 p, root, root_data_group, (GET)|(POST)|(PUT)|(DELETE)
 
-# m = g3(r.obj, "pub_endpoint") || (g(r.sub, p.sub) && g2(r.obj, p.obj) && regexMatch(r.act, p.act))
-
 # g 定义用户组
 g, user, user_group
 g, employee, employee_group

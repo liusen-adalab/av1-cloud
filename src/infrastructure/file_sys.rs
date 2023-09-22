@@ -258,6 +258,14 @@ fn copy_dir_all(src: &Path, dst: &Path) -> Result<()> {
 }
 
 pub(crate) async fn child_file_names(dir: &Path) -> Result<Vec<String>> {
+    if !fs::try_exists(dir).await? {
+        return Ok(Default::default());
+    }
+
+    if !fs::metadata(dir).await?.is_dir() {
+        return Ok(Default::default());
+    }
+
     let mut names = vec![];
     let dir = std::fs::read_dir(dir)?;
     for entry in dir {

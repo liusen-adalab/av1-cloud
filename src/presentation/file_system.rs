@@ -174,7 +174,9 @@ pub fn actix_config(cfg: &mut web::ServiceConfig) {
             .service(web::resource("/delete").route(web::post().to(delete_admin)))
             .service(web::resource("/copy").route(web::post().to(copy_admin)))
             .service(web::resource("/move").route(web::post().to(move_to_admin)))
-            .service(web::resource("/rename").route(web::post().to(rename_admin))),
+            .service(web::resource("/rename").route(web::post().to(rename_admin)))
+            .service(web::resource("/thumbnails").route(web::get().to(thumbnail_paths)))
+            .service(thumbnail_file),
     );
 }
 
