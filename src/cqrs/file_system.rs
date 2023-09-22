@@ -204,6 +204,16 @@ impl UserFile {
 }
 
 impl UserFile {
+    pub async fn find(id: UserFileId) -> anyhow::Result<Option<Self>> {
+        let mut conn = pg_conn().await?;
+        let file = user_files::table
+            .filter(user_files::id.eq(id))
+            .select(UserFile::as_select())
+            .first::<UserFile>(&mut conn)
+            .await?;
+        Ok(Some(file))
+    }
+
     async fn detail_inner(&self) -> anyhow::Result<Option<FileData>> {
         if let Some(sys_file_id) = self.sys_file_id {
             let mut conn = pg_conn().await?;

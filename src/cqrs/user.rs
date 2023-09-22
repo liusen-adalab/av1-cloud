@@ -11,7 +11,7 @@ use utils::db_pools::postgres::pg_conn;
 use crate::domain::file_system::file::UserFileId;
 use crate::schema::users;
 
-use super::file_system::DirContent;
+use super::file_system::{DirContent, UserFile};
 use super::{MillionTimestamp, Paginate};
 
 use crate::domain::user::user::UserId;
@@ -53,6 +53,11 @@ impl User {
     async fn dir(&self, file_id: UserFileId, page: Paginate) -> Result<Option<DirContent>> {
         let dir = DirContent::load(self.id, file_id, page).await?;
         Ok(dir)
+    }
+
+    /// 获取用户文件
+    async fn file(&self, id: UserFileId) -> Result<Option<UserFile>> {
+        Ok(UserFile::find(id).await?)
     }
 }
 
