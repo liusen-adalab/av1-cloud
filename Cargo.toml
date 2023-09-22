@@ -75,6 +75,7 @@ actix-multipart = "0.6.1"
 async-recursion = "1.0.5"
 clean-path = "0.2.1"
 tracing-test = "0.2.4"
+actix-files = "0.6.2"
 
 [dev-dependencies]
 # 必须使用 rustls，因为 arch 系统的 openssl 产生了不兼容的更改

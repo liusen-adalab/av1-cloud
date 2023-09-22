@@ -12,7 +12,7 @@ use crate::{
         user::{self, LoginDto, ResetPasswordDto, SendSmsCodeErr, UserDto, UserUpdateDto},
     },
     domain::user::service::{LoginErr, RegisterErr, ResetPasswordErr, UpdateProfileErr},
-    http::{ApiError, ApiResponse, JsonResponse},
+    http::{ApiError, ApiResponse, ApiResult},
     log_if_err, status_doc,
 };
 
@@ -251,7 +251,7 @@ pub struct CheckRgisterdResp {
 
 pub(crate) async fn check_register(
     params: Query<CheckRgisterdParams>,
-) -> JsonResponse<CheckRgisterdResp> {
+) -> ApiResult<CheckRgisterdResp> {
     let CheckRgisterdParams { email } = params.into_inner();
     let registerd = user::is_email_registerd(email).await?;
     ApiResponse::Ok(CheckRgisterdResp {
@@ -274,26 +274,26 @@ pub struct CheckEmailCodeResp {
 
 pub(crate) async fn check_email_code(
     params: Query<CheckEmailCodeParams>,
-) -> JsonResponse<CheckEmailCodeResp> {
+) -> ApiResult<CheckEmailCodeResp> {
     let CheckEmailCodeParams { email, code } = params.into_inner();
     let valid = email::verify_email_code(email, code).await??;
 
     ApiResponse::Ok(CheckEmailCodeResp { valid })
 }
 
-pub(crate) async fn register(params: Json<UserDto>, req: HttpRequest) -> JsonResponse<()> {
+pub(crate) async fn register(params: Json<UserDto>, req: HttpRequest) -> ApiResult<()> {
     let id = user::register(params.into_inner()).await??;
     Identity::login(&req.extensions(), id.to_string())?;
     ApiResponse::Ok(())
 }
 
-pub(crate) async fn login(params: Json<LoginDto>, req: HttpRequest) -> JsonResponse<()> {
+pub(crate) async fn login(params: Json<LoginDto>, req: HttpRequest) -> ApiResult<()> {
     let id = user::login(params.into_inner()).await??;
     Identity::login(&req.extensions(), id.to_string())?;
     ApiResponse::Ok(())
 }
 
-pub(crate) async fn logout(id: Identity) -> JsonResponse<()> {
+pub(crate) async fn logout(id: Identity) -> ApiResult<()> {
     let user_id = id.id()?.parse()?;
     // 不返回错误，只记录日志
     log_if_err!(user::logout(user_id).await);
@@ -313,19 +313,19 @@ pub struct SendEmailCodeParams {
     fake: bool,
 }
 
-pub async fn send_email_code(params: Query<SendEmailCodeParams>) -> JsonResponse<()> {
+pub async fn send_email_code(params: Query<SendEmailCodeParams>) -> ApiResult<()> {
     let SendEmailCodeParams { email, fake } = params.into_inner();
 
     email::send_email_code(email, fake).await??;
     ApiResponse::Ok(())
 }
 
-pub async fn reset_password(params: Json<ResetPasswordDto>) -> JsonResponse<()> {
+pub async fn reset_password(params: Json<ResetPasswordDto>) -> ApiResult<()> {
     user::reset_password(params.into_inner()).await??;
     ApiResponse::Ok(())
 }
 
-pub async fn update_profile(id: Identity, params: Json<UserUpdateDto>) -> JsonResponse<()> {
+pub async fn update_profile(id: Identity, params: Json<UserUpdateDto>) -> ApiResult<()> {
     let user_id = id.id()?.parse()?;
     user::update_profile(user_id, params.into_inner()).await??;
     ApiResponse::Ok(())
@@ -342,7 +342,7 @@ pub struct UserUpdateDtoByAdmin {
 pub async fn update_profile_by_employee(
     _id: Identity,
     params: Json<UserUpdateDtoByAdmin>,
-) -> JsonResponse<()> {
+) -> ApiResult<()> {
     let UserUpdateDtoByAdmin {
         user_id,
         new_profile,
@@ -360,7 +360,7 @@ pub struct SendSmsCodeParams {
     fake: bool,
 }
 
-pub async fn send_sms_code(params: Query<SendSmsCodeParams>) -> JsonResponse<()> {
+pub async fn send_sms_code(params: Query<SendSmsCodeParams>) -> ApiResult<()> {
     let SendSmsCodeParams {
         mobile_number,
         fake,

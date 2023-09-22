@@ -1,4 +1,7 @@
+use std::path::PathBuf;
+
 use crate::domain::file_system::file::FileOperateErr::*;
+use crate::domain::file_system::service::path_manager;
 use crate::{
     biz_ok,
     domain::{
@@ -224,4 +227,17 @@ pub async fn copy_to_tx(
     }
 
     biz_ok!(())
+}
+
+pub async fn thumbnail_names(file_id: UserFileId) -> Result<(String, Vec<String>)> {
+    let hash = repo_user_file::get_hash(file_id).await?;
+    let dir = path_manager().thumbnail_dir(&hash);
+    let names = file_sys::child_file_names(&dir).await?;
+
+    Ok((hash, names))
+}
+
+pub fn thumbnail_path(hash: &str, file_name: &str) -> PathBuf {
+    let dir = path_manager().thumbnail_dir(hash);
+    dir.join(file_name)
 }

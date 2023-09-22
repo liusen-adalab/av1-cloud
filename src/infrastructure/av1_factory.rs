@@ -21,6 +21,7 @@ pub struct VideoTask<'a> {
 #[serde(rename_all = "camelCase")]
 pub enum VideoTaskType<'a> {
     Parse(Parse<'a>),
+    Thumbnail(Thumbnail<'a>),
 }
 
 #[derive(Serialize, Debug)]
@@ -52,6 +53,34 @@ pub(crate) async fn parse_file(file_id: SysFileId, path: &Path) -> Result<()> {
             path: Cow::Borrowed(path),
         }),
     };
+    send_task(task).await?;
+
+    Ok(())
+}
+
+#[derive(Serialize, Debug)]
+pub struct Thumbnail<'a> {
+    path: &'a Path,
+    out_dir: &'a Path,
+}
+
+pub(crate) async fn generate_thumbnail(
+    file_id: SysFileId,
+    path: &Path,
+    out_dir: &Path,
+) -> Result<()> {
+    debug!(%file_id, "sending parse task request");
+    let task = VideoTask {
+        id: TaskId::next_id().0,
+        file_id: file_id.0,
+        task: VideoTaskType::Thumbnail(Thumbnail { path, out_dir }),
+    };
+    send_task(task).await?;
+
+    Ok(())
+}
+
+async fn send_task(task: VideoTask<'_>) -> Result<()> {
     #[cfg(not(test))]
     let endpoint = &get_settings().av1_factory.endpoint;
     #[cfg(test)]

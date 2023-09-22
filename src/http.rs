@@ -5,7 +5,7 @@ use actix_web::{body::BoxBody, http::StatusCode, web::Json, HttpResponse, Respon
 use serde::Serialize;
 
 type Result<T, E = ApiError> = std::result::Result<T, E>;
-pub type JsonResponse<T> = Result<Json<ApiResponse<T>>>;
+pub type ApiResult<T> = Result<Json<ApiResponse<T>>>;
 
 type StdResult<T, E> = std::result::Result<T, E>;
 pub type BizResult<T, E> = StdResult<StdResult<T, E>, anyhow::Error>;

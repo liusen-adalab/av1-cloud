@@ -9,7 +9,7 @@ use crate::application::user::employee::{
 };
 use crate::http::{ApiError, ApiResponse};
 use crate::log_if_err;
-use crate::{http::JsonResponse, status_doc};
+use crate::{http::ApiResult, status_doc};
 
 use super::user::{EMAIL_FORMAT, PASSWORD_FORMAT, SANITY_CHECK};
 
@@ -90,13 +90,13 @@ pub fn config(cfg: &mut web::ServiceConfig) {
 
 status_doc!();
 
-pub async fn generate_invite_code(id: Identity) -> JsonResponse<String> {
+pub async fn generate_invite_code(id: Identity) -> ApiResult<String> {
     let id = id.id()?.parse()?;
     let code = employee::generate_invite_code(id).await?;
     ApiResponse::Ok(code)
 }
 
-pub async fn register(params: Json<EmployeeRegisterDto>, req: HttpRequest) -> JsonResponse<()> {
+pub async fn register(params: Json<EmployeeRegisterDto>, req: HttpRequest) -> ApiResult<()> {
     let params = params.into_inner();
     let (id, role) = employee::register(params.clone()).await??;
 
@@ -107,7 +107,7 @@ pub async fn register(params: Json<EmployeeRegisterDto>, req: HttpRequest) -> Js
     ApiResponse::Ok(())
 }
 
-pub async fn login(params: Json<LoginDto>, req: HttpRequest) -> JsonResponse<()> {
+pub async fn login(params: Json<LoginDto>, req: HttpRequest) -> ApiResult<()> {
     let (id, role) = employee::login(params.into_inner()).await??;
 
     Identity::login(&req.extensions(), id.to_string())?;
@@ -118,7 +118,7 @@ pub async fn login(params: Json<LoginDto>, req: HttpRequest) -> JsonResponse<()>
     ApiResponse::Ok(())
 }
 
-pub async fn logout(id: Identity) -> JsonResponse<()> {
+pub async fn logout(id: Identity) -> ApiResult<()> {
     let user_id = id.id()?.parse()?;
     // 不返回错误，只记录日志
     log_if_err!(employee::logout(user_id).await);

@@ -226,6 +226,7 @@ pub async fn upload_finished_tx(
     let file_data = ensure_biz!(load_sys_file(&task).await?);
     let sys_file_id = *file_data.id();
     let file_data_path = file_data.archived_path().clone();
+    let thumbnail_dir = path_manager().thumbnail_dir(&file_data.hash);
     let file = ensure_biz!(parent.create_file(&task.path().file_name(), file_data));
 
     let new_name = file.file_name() != task.path().file_name();
@@ -243,6 +244,11 @@ pub async fn upload_finished_tx(
         log_if_err!(av1_factory::parse_file(sys_file_id, &file_data_path)
             .await
             .context("send parse req"));
+        log_if_err!(
+            av1_factory::generate_thumbnail(sys_file_id, &file_data_path, &thumbnail_dir)
+                .await
+                .context("send thumbnail req")
+        );
     });
 
     // 更新 task 状态，必须是最后一个可能失败的操作

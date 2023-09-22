@@ -51,6 +51,10 @@ impl PathManager {
     pub fn archived_path(&self, hash: &str) -> PathBuf {
         self.archived_dir(hash).join("origin-file")
     }
+
+    pub fn thumbnail_dir(&self, hash: &str) -> PathBuf {
+        self.archived_dir(hash).join("thumbnails")
+    }
 }
 
 impl PathManager {

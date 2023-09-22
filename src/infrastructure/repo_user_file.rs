@@ -15,12 +15,14 @@ use crate::{
 use anyhow::{ensure, Result};
 use derive_more::From;
 use diesel::{
+    debug_query,
     prelude::{Identifiable, Insertable, Queryable},
     result::OptionalExtension,
-    AsChangeset, ExpressionMethods, QueryDsl, Selectable, SelectableHelper,
+    AsChangeset, ExpressionMethods, JoinOnDsl, QueryDsl, Selectable, SelectableHelper,
 };
 use diesel_async::RunQueryDsl;
 use serde::{Deserialize, Serialize};
+use tracing::debug;
 use utils::db_pools::postgres::{pg_conn, PgConn};
 
 use super::EffectedRow;
@@ -408,4 +410,23 @@ pub async fn update_file_matedata(
         .execute(conn)
         .await?;
     Ok(())
+}
+
+pub(crate) async fn get_hash(id: UserFileId) -> Result<String> {
+    let conn = &mut pg_conn().await?;
+    let hash = user_files::table
+        .inner_join(sys_files::table.on(sys_files::id.eq(user_files::id)))
+        .filter(user_files::id.eq(id))
+        .select(sys_files::hash);
+    let sql = debug_query::<diesel::pg::Pg, _>(&hash);
+    debug!(%sql, "getting hash of user-file");
+
+    let hash = user_files::table
+        .inner_join(sys_files::table)
+        .filter(user_files::id.eq(id))
+        .select(sys_files::hash)
+        .get_result::<String>(conn)
+        .await?;
+
+    Ok(hash)
 }

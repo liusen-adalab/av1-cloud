@@ -256,3 +256,14 @@ fn copy_dir_all(src: &Path, dst: &Path) -> Result<()> {
     }
     Ok(())
 }
+
+pub(crate) async fn child_file_names(dir: &Path) -> Result<Vec<String>> {
+    let mut names = vec![];
+    let dir = std::fs::read_dir(dir)?;
+    for entry in dir {
+        let entry = entry?;
+        let name = entry.file_name().to_string_lossy().to_string();
+        names.push(name);
+    }
+    Ok(names)
+}

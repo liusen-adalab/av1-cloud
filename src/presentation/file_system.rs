@@ -1,5 +1,6 @@
 use std::collections::HashSet;
 
+use actix_files::NamedFile;
 use actix_identity::Identity;
 use actix_multipart::form::bytes::Bytes;
 use actix_multipart::form::text::Text;
@@ -8,7 +9,7 @@ use actix_session::SessionExt;
 use actix_web::web::{self, Json, Query};
 use actix_web::HttpRequest;
 use serde::{Deserialize, Serialize};
-use tracing::{debug, warn};
+use tracing::{debug, info, warn};
 use utils::code;
 
 use crate::application::file_system::service::{self, DirTree};
@@ -21,7 +22,7 @@ use crate::domain::file_system::file::{FileOperateErr, UserFileId, VirtualPathEr
 use crate::domain::file_system::service_upload::UploadTaskId;
 use crate::domain::user::user::UserId;
 use crate::http::{ApiError, ApiResponse};
-use crate::{http::JsonResponse, status_doc};
+use crate::{http::ApiResult, status_doc};
 
 code! {
     mod = "file_system";
@@ -140,6 +141,9 @@ pub fn actix_config(cfg: &mut web::ServiceConfig) {
             .service(web::resource("/copy").route(web::post().to(copy)))
             .service(web::resource("/move").route(web::post().to(move_to)))
             .service(web::resource("/rename").route(web::post().to(rename)))
+            // thumbnail
+            .service(web::resource("/thumbnails").route(web::get().to(thumbnail_paths)))
+            .service(thumbnail_file)
             // upload
             .service(
                 web::resource("/register_upload_task").route(web::post().to(register_upload_task)),
@@ -156,7 +160,11 @@ pub fn actix_config(cfg: &mut web::ServiceConfig) {
                     .route(web::post().to(upload_slice)),
             )
             .service(web::resource("/finish_upload").route(web::post().to(upload_finished)))
-            .service(web::resource("/file_parsed").route(web::post().to(file_parsed))),
+            // from factory
+            .service(web::resource("/file_parsed").route(web::post().to(file_parsed)))
+            .service(
+                web::resource("/thumbnail_generated").route(web::post().to(thumbnail_generated)),
+            ),
     )
     .service(
         web::scope("/admin/fs")
@@ -176,12 +184,12 @@ struct LoadHomeParams {
     user_id: UserId,
 }
 
-async fn load_home_admin(_id: Identity, params: Query<LoadHomeParams>) -> JsonResponse<DirTree> {
+async fn load_home_admin(_id: Identity, params: Query<LoadHomeParams>) -> ApiResult<DirTree> {
     let tree = service::load_home(params.user_id).await?;
     ApiResponse::Ok(tree)
 }
 
-async fn load_home(id: Identity) -> JsonResponse<DirTree> {
+async fn load_home(id: Identity) -> ApiResult<DirTree> {
     let id = id.id()?.parse::<UserId>()?;
     let tree = service::load_home(id).await?;
     ApiResponse::Ok(tree)
@@ -205,7 +213,7 @@ struct AdminParams<T> {
 async fn create_dir_admin(
     _id: Identity,
     params: Json<AdminParams<CreateDirDto>>,
-) -> JsonResponse<CreateDirResp> {
+) -> ApiResult<CreateDirResp> {
     let AdminParams {
         user_id,
         params: CreateDirDto { parent_id, name },
@@ -220,7 +228,7 @@ struct CreateDirResp {
     pub file_id: UserFileId,
 }
 
-async fn create_dir(id: Identity, params: Json<CreateDirDto>) -> JsonResponse<CreateDirResp> {
+async fn create_dir(id: Identity, params: Json<CreateDirDto>) -> ApiResult<CreateDirResp> {
     let id = id.id()?.parse::<UserId>()?;
     let CreateDirDto { parent_id, name } = params.into_inner();
     let file_id = service::create_dir(id, parent_id, &name).await??;
@@ -233,7 +241,7 @@ async fn register_upload_task(
     params: Json<RegisterUploadTaskDto>,
     identity: Identity,
     req: HttpRequest,
-) -> JsonResponse<RegisterUploadTaskResp> {
+) -> ApiResult<RegisterUploadTaskResp> {
     let id = identity.id()?.parse::<UserId>()?;
     let resp = upload::register_upload_task(id, params.into_inner()).await??;
     let ss = req.get_session();
@@ -244,7 +252,7 @@ async fn register_upload_task(
     ApiResponse::Ok(resp)
 }
 
-async fn get_upload_tasks(_id: Identity, req: HttpRequest) -> JsonResponse<Vec<UploadTaskDto>> {
+async fn get_upload_tasks(_id: Identity, req: HttpRequest) -> ApiResult<Vec<UploadTaskDto>> {
     let ss = req.get_session();
     let tasks: Option<HashSet<UploadTaskId>> = ss.get(UPLOAD_TASKS)?;
     let Some(tasks) = tasks else {
@@ -265,7 +273,7 @@ async fn del_upload_task(
     _id: Identity,
     params: Json<DelUplodTask>,
     req: HttpRequest,
-) -> JsonResponse<()> {
+) -> ApiResult<()> {
     let DelUplodTask { task_id } = params.into_inner();
 
     upload::clear_upload_tasks(HashSet::from_iter(vec![task_id])).await?;
@@ -285,7 +293,7 @@ fn del_session_upload_task(task_id: UploadTaskId, req: HttpRequest) -> anyhow::R
     Ok(())
 }
 
-async fn clear_upload_tasks(_id: Identity, req: HttpRequest) -> JsonResponse<()> {
+async fn clear_upload_tasks(_id: Identity, req: HttpRequest) -> ApiResult<()> {
     let ss = req.get_session();
     let tasks: Option<HashSet<UploadTaskId>> = ss.get(UPLOAD_TASKS)?;
     let Some(tasks) = tasks else {
@@ -307,7 +315,7 @@ pub struct UploadSliceParams {
 pub async fn upload_slice(
     _id: Identity,
     MultipartForm(form): MultipartForm<UploadSliceParams>,
-) -> JsonResponse<()> {
+) -> ApiResult<()> {
     upload::store_slice(form.task_id.parse()?, form.index.0, &form.chunk.data).await??;
     ApiResponse::Ok(())
 }
@@ -322,7 +330,7 @@ async fn upload_finished(
     _id: Identity,
     params: Json<UploadFinishedParam>,
     http_req: HttpRequest,
-) -> JsonResponse<UploadedUserFile> {
+) -> ApiResult<UploadedUserFile> {
     let UploadFinishedParam { task_id } = params.into_inner();
     let resp = upload::upload_finished(task_id).await??;
 
@@ -337,14 +345,14 @@ struct DeleteDto {
     file_ids: Vec<UserFileId>,
 }
 
-async fn delete(id: Identity, params: Json<DeleteDto>) -> JsonResponse<()> {
+async fn delete(id: Identity, params: Json<DeleteDto>) -> ApiResult<()> {
     let id = id.id()?.parse::<UserId>()?;
     let DeleteDto { file_ids } = params.into_inner();
     service::delete(id, file_ids).await??;
     ApiResponse::Ok(())
 }
 
-async fn delete_admin(_id: Identity, params: Json<AdminParams<DeleteDto>>) -> JsonResponse<()> {
+async fn delete_admin(_id: Identity, params: Json<AdminParams<DeleteDto>>) -> ApiResult<()> {
     let AdminParams {
         user_id,
         params: DeleteDto { file_ids },
@@ -360,14 +368,14 @@ struct MoveToParams {
     to: UserFileId,
 }
 
-async fn copy(id: Identity, params: Json<MoveToParams>) -> JsonResponse<()> {
+async fn copy(id: Identity, params: Json<MoveToParams>) -> ApiResult<()> {
     let id = id.id()?.parse::<UserId>()?;
     let MoveToParams { from, to } = params.into_inner();
     service::copy_to(id, from, to).await??;
     ApiResponse::Ok(())
 }
 
-async fn copy_admin(_id: Identity, params: Json<AdminParams<MoveToParams>>) -> JsonResponse<()> {
+async fn copy_admin(_id: Identity, params: Json<AdminParams<MoveToParams>>) -> ApiResult<()> {
     let AdminParams {
         user_id,
         params: MoveToParams { from, to },
@@ -376,14 +384,14 @@ async fn copy_admin(_id: Identity, params: Json<AdminParams<MoveToParams>>) -> J
     ApiResponse::Ok(())
 }
 
-async fn move_to(id: Identity, params: Json<MoveToParams>) -> JsonResponse<()> {
+async fn move_to(id: Identity, params: Json<MoveToParams>) -> ApiResult<()> {
     let id = id.id()?.parse::<UserId>()?;
     let MoveToParams { from, to } = params.into_inner();
     service::move_to(id, from, to).await??;
     ApiResponse::Ok(())
 }
 
-async fn move_to_admin(_id: Identity, params: Json<AdminParams<MoveToParams>>) -> JsonResponse<()> {
+async fn move_to_admin(_id: Identity, params: Json<AdminParams<MoveToParams>>) -> ApiResult<()> {
     let AdminParams {
         user_id,
         params: MoveToParams { from, to },
@@ -399,14 +407,14 @@ struct RenameParams {
     new_name: String,
 }
 
-async fn rename(id: Identity, params: Json<RenameParams>) -> JsonResponse<()> {
+async fn rename(id: Identity, params: Json<RenameParams>) -> ApiResult<()> {
     let id = id.id()?.parse::<UserId>()?;
     let RenameParams { file_id, new_name } = params.into_inner();
     service::rename(id, file_id, &new_name).await??;
     ApiResponse::Ok(())
 }
 
-async fn rename_admin(_id: Identity, params: Json<AdminParams<RenameParams>>) -> JsonResponse<()> {
+async fn rename_admin(_id: Identity, params: Json<AdminParams<RenameParams>>) -> ApiResult<()> {
     let AdminParams {
         user_id,
         params: RenameParams { file_id, new_name },
@@ -422,7 +430,7 @@ pub struct TaskResult<O> {
     pub result: Result<O, String>,
 }
 
-async fn file_parsed(params: Json<TaskResult<Option<String>>>) -> JsonResponse<()> {
+async fn file_parsed(params: Json<TaskResult<Option<String>>>) -> ApiResult<()> {
     let TaskResult {
         task_id: _,
         file_id,
@@ -439,4 +447,51 @@ async fn file_parsed(params: Json<TaskResult<Option<String>>>) -> JsonResponse<(
         }
     }
     ApiResponse::Ok(())
+}
+
+async fn thumbnail_generated(params: Json<TaskResult<()>>) -> ApiResult<()> {
+    let TaskResult {
+        task_id,
+        file_id,
+        result,
+    } = params.into_inner();
+
+    match result {
+        Ok(_) => {
+            info!(task_id, file_id, "thumbnail generated");
+        }
+        Err(err) => {
+            warn!(%err, "generate thumbnail failed");
+        }
+    }
+    ApiResponse::Ok(())
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ThumbnailsParams {
+    file_id: UserFileId,
+}
+
+pub async fn thumbnail_paths(params: Query<ThumbnailsParams>) -> ApiResult<Vec<String>> {
+    let ThumbnailsParams { file_id } = params.into_inner();
+    let (hash, names) = service::thumbnail_names(file_id).await?;
+    let paths = names
+        .into_iter()
+        .map(|name| format!("/{}/{}", hash, name))
+        .collect::<Vec<_>>();
+
+    ApiResponse::Ok(paths)
+}
+
+#[actix_web::get("/thumbnail/{hash:[a-fA-F0-9]{64}}/{file_name:\\w+.*?[.jpg|.png|.jpeg]$}")]
+async fn thumbnail_file(path: web::Path<(String, String)>) -> actix_web::Result<NamedFile> {
+    let (hash, file_name) = path.into_inner();
+    let disk_path = service::thumbnail_path(&hash, &file_name);
+
+    let file = tokio::task::spawn_blocking(|| NamedFile::open(disk_path))
+        .await
+        .unwrap()?;
+
+    Ok(file)
 }
