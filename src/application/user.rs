@@ -50,7 +50,7 @@ pub async fn register(user_dto: UserDto) -> BizResult<UserId, RegisterErr> {
 }
 
 pub async fn register_test_user() -> Result<()> {
-    for i in 1..=5 {
+    for i in 1..=12 {
         let email = Email::try_from(format!("aa{}@cc.com", i)).unwrap();
         let password = Password::try_from_async("aabbccdd".to_string())
             .await

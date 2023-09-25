@@ -277,23 +277,25 @@ impl DirContent {
             .get_result(&mut conn)
             .await?;
 
-        let mut files: Vec<UserFile> = user_files::table
+        let mut dir_or_files: Vec<UserFile> = user_files::table
             .filter(user_files::user_id.eq(user_id))
             .filter(user_files::parent_id.eq(dir_id))
             .filter(user_files::deleted.eq(false))
             .select(UserFile::as_select())
             .limit(page.page_size as i64)
             .offset(offset as i64)
-            .order_by(user_files::is_dir.asc())
+            .order_by(user_files::is_dir.desc())
             .load::<UserFile>(&mut conn)
             .await?;
 
-        let idx = files.iter().position(|f| f.is_dir);
-        let dirs: Vec<_> = files.drain(idx.unwrap_or(files.len())..).collect();
+        let first_file_idx = dir_or_files.iter().position(|f| !f.is_dir);
+        let files: Vec<_> = dir_or_files
+            .drain(first_file_idx.unwrap_or(dir_or_files.len())..)
+            .collect();
 
         let mut dir = Self {
             total: total as u64,
-            dirs,
+            dirs: dir_or_files,
             files,
         };
         dir.sort_by_name();
