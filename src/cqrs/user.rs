@@ -96,6 +96,18 @@ impl User {
 
         // where clause
         if let Some(search) = params.search_by {
+            // Fixme: 目前用户的等级和状态都是固定的，所以不需要过滤
+            if let Some(level) = search.level {
+                if !matches!(level, UserLevel::Normal) {
+                    return Ok(Default::default());
+                }
+            }
+            if let Some(status) = search.status {
+                if !matches!(status, UserStatus::Ok) {
+                    return Ok(Default::default());
+                }
+            }
+
             macro_rules! filter_if_not_empty {
                 ($field:tt $(,)?) => {{
                     if let Some(field) = search.$field {

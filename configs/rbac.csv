@@ -35,3 +35,4 @@ g3, /admin/employee/logout, pub_endpoint
 g3, /api/*, pub_endpoint
 g3, /ping, pub_endpoint
 g3, /*/doc, pub_endpoint
+g3, /*/thumbnail/*, pub_endpoint 
