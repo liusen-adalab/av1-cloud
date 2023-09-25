@@ -89,6 +89,27 @@ impl User {
         biz_ok!(())
     }
 
+    pub async fn update_profile_uncheck(
+        &mut self,
+        update: UserUpdate,
+    ) -> BizResult<(), UpdateProfileErr> {
+        if let Some(password) = update.password {
+            self.reset_password(password.new_password);
+        }
+
+        if let Some(name) = update.user_name {
+            self.name = name
+        }
+
+        self.address = update.address;
+
+        if let Some(mobile_number) = update.mobile_number {
+            self.mobile_number = Some(mobile_number)
+        }
+
+        biz_ok!(())
+    }
+
     pub fn from_po(user: UserPo) -> anyhow::Result<User> {
         Ok(User {
             id: user.id,

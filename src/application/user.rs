@@ -119,6 +119,8 @@ pub struct UserUpdateDto {
 #[derive(Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct UpdatePassword {
+    // 管理员可以不传这个参数
+    #[serde(default)]
     old_password: String,
     new_password: String,
 }
@@ -170,6 +172,42 @@ pub async fn update_profile(
     };
 
     pg_tx!(service::update_profile, user_id, update_info)
+}
+
+pub async fn update_profile_uncheck(
+    user_id: UserId,
+    update_info: UserUpdateDto,
+) -> BizResult<(), UpdateProfileErr> {
+    let phone = if let Some(phone_params) = update_info.mobile_number {
+        let phone = ensure_biz!(Phone::try_from(phone_params.tel));
+        Some(phone)
+    } else {
+        None
+    };
+    let user_name = if let Some(name) = update_info.user_name {
+        Some(ensure_biz!(UserName::try_from(name)))
+    } else {
+        None
+    };
+
+    let password = if let Some(password) = update_info.password {
+        let p = service::UpdatePassword {
+            old_password: password.old_password,
+            new_password: ensure_biz!(Password::try_from_async(password.new_password).await),
+        };
+        Some(p)
+    } else {
+        None
+    };
+
+    let update_info = service::UserUpdate {
+        user_name,
+        password,
+        address: update_info.address.map(|a| a.join(",")),
+        mobile_number: phone,
+    };
+
+    pg_tx!(service::update_profile_uncheck, user_id, update_info)
 }
 
 #[derive(From)]

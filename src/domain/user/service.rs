@@ -143,3 +143,27 @@ pub async fn update_profile(
     repo_user::update(&user, conn).await?;
     biz_ok!(())
 }
+
+pub async fn update_profile_uncheck(
+    user_id: UserId,
+    update_info: UserUpdate,
+    conn: &mut PgConn,
+) -> BizResult<(), UpdateProfileErr> {
+    if let Some(phone) = &update_info.mobile_number {
+        // 目前单个手机号只能绑定一个账号
+        ensure_biz!(
+            not repo_user::exist(phone, conn).await?,
+            UpdateProfileErr::PhoneAlreadyBinded
+        );
+    }
+
+    let mut user = ensure_exist!(
+        repo_user::find(user_id, conn).await?,
+        UpdateProfileErr::NotFound
+    );
+
+    ensure_biz!(user.update_profile_uncheck(update_info).await?);
+
+    repo_user::update(&user, conn).await?;
+    biz_ok!(())
+}

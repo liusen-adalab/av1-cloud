@@ -348,7 +348,7 @@ pub async fn update_profile_by_employee(
         new_profile,
     } = params.into_inner();
     let user_id = user_id.parse()?;
-    user::update_profile(user_id, new_profile).await??;
+    user::update_profile_uncheck(user_id, new_profile).await??;
     ApiResponse::Ok(())
 }
 
