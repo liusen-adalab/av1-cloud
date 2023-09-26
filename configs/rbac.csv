@@ -3,7 +3,7 @@
 # p, user_group, user_data_group, (GET)|(POST)|(PUT)|(DELETE)
 
 # 员工可以读用户信息，但是不能修改
-p, employee_group, employee_data_group, GET
+p, employee_group, employee_data_group, (GET)|(POST)
 # 员工可以调用 graphql 接口
 p, employee_group, /admin/query, (GET)|(POST)
 
