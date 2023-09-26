@@ -123,7 +123,7 @@ pub struct AudioInfo {
     BitRate: Option<u32>,
 
     #[serde(default)]
-    Channels: Option<u8>,
+    pub Channels: Option<u8>,
 
     ChannelLayout: Option<String>,
 

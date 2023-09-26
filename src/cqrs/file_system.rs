@@ -2,9 +2,11 @@ use async_graphql::{ComplexObject, Enum, SimpleObject};
 use diesel::{prelude::Queryable, ExpressionMethods, QueryDsl, Selectable, SelectableHelper};
 use diesel_async::RunQueryDsl;
 use serde::Deserialize;
+use tracing::warn;
 use utils::db_pools::postgres::pg_conn;
 
 use crate::{
+    application::file_system::video_info::AudioInfo,
     domain::{
         file_system::file::{SysFileId, UserFileId},
         user::user::UserId,
@@ -87,6 +89,70 @@ pub enum CodecType {
     UNSUPPORTED,
 }
 
+#[derive(Enum, Copy, Clone, Eq, PartialEq)]
+pub enum ResolutionQl {
+    #[graphql(name = "_144p")]
+    _144P,
+    #[graphql(name = "_240p")]
+    _240P,
+    #[graphql(name = "_360p")]
+    _360P,
+    #[graphql(name = "_480p")]
+    _480P,
+    #[graphql(name = "_720p")]
+    _720P,
+    #[graphql(name = "_1080p")]
+    _1080P,
+    #[graphql(name = "_1440p")]
+    _1440P,
+    #[graphql(name = "_4k")]
+    _4K,
+}
+
+#[derive(Enum, Copy, Clone, Eq, PartialEq)]
+pub enum Channels {
+    #[graphql(name = "_1")]
+    _1 = 1,
+    #[graphql(name = "_2")]
+    _2 = 2,
+    #[graphql(name = "_51")]
+    _51 = 6,
+    #[graphql(name = "_71")]
+    _71 = 8,
+}
+
+impl ResolutionQl {
+    fn try_from(width: i32, height: i32) -> Option<Self> {
+        let res1 = match (width, height) {
+            (0..=256, 0..=144) => Some(Self::_144P),
+            (257..=426, 145..=240) => Some(Self::_240P),
+            (427..=640, 241..=360) => Some(Self::_360P),
+            (641..=768, 361..=480) => Some(Self::_480P),
+            (769..=1280, 481..=720) => Some(Self::_720P),
+            (1281..=1920, 721..=1080) => Some(Self::_1080P),
+            (1921..=2560, 1081..=1440) => Some(Self::_1440P),
+            (2561..=3840, 1441..=2160) => Some(Self::_4K),
+            _ => None,
+        };
+        let res = res1.or_else(|| match (height, width) {
+            (0..=256, 0..=144) => Some(Self::_144P),
+            (257..=426, 145..=240) => Some(Self::_240P),
+            (427..=640, 241..=360) => Some(Self::_360P),
+            (641..=768, 361..=480) => Some(Self::_480P),
+            (769..=1280, 481..=720) => Some(Self::_720P),
+            (1281..=1920, 721..=1080) => Some(Self::_1080P),
+            (1921..=2560, 1081..=1440) => Some(Self::_1440P),
+            (2561..=3840, 1441..=2160) => Some(Self::_4K),
+            _ => None,
+        });
+
+        if res.is_none() {
+            warn!(width, height, "failed to convert resolution");
+        }
+        res
+    }
+}
+
 #[ComplexObject]
 impl FileData {
     /// 文件类型
@@ -116,6 +182,27 @@ impl FileData {
     /// 视频编码类型
     async fn codec_type(&self) -> Result<Option<CodecType>> {
         Ok(self.codec_type_inner().await?)
+    }
+
+    /// 视频分辨率
+    async fn resolution(&self) -> Result<Option<ResolutionQl>> {
+        let conn = &mut pg_conn().await?;
+        let (height, width) = sys_files::table
+            .filter(sys_files::id.eq(self.id))
+            .select((sys_files::height, sys_files::width))
+            .first::<(Option<i32>, Option<i32>)>(conn)
+            .await?;
+        let (Some(height), Some(width)) = (height, width) else {
+            return Ok(None);
+        };
+
+        let res = ResolutionQl::try_from(width, height);
+        Ok(res)
+    }
+
+    /// 音频通道数
+    async fn channels(&self) -> Result<Option<Channels>> {
+        Ok(self.channels_inner().await?)
     }
 }
 
@@ -151,6 +238,19 @@ impl FileData {
             .await?;
         let info = info.map(|info| serde_json::from_str(&info)).transpose()?;
         Ok(info)
+    }
+
+    async fn channels_inner(&self) -> Result<Option<Channels>> {
+        let audio = self.audio_info_inner().await?;
+        let audio: Option<AudioInfo> = audio.map(|v| serde_json::from_value(v)).transpose()?;
+        let channels = audio.and_then(|v| v.Channels).and_then(|v| match v {
+            1 => Some(Channels::_1),
+            2 => Some(Channels::_2),
+            6 => Some(Channels::_51),
+            8 => Some(Channels::_71),
+            _ => None,
+        });
+        Ok(channels)
     }
 
     async fn codec_type_inner(&self) -> Result<Option<CodecType>> {
