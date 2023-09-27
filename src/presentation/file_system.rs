@@ -18,7 +18,7 @@ use crate::application::file_system::upload::{
     RegisterUploadTaskResp, StoreSliceErr, UploadTaskDto, UploadedUserFile,
 };
 use crate::application::file_system::video_info;
-use crate::application::transcode::{self, TaskResult};
+use crate::application::transcode::TaskResult;
 use crate::domain::file_system::file::{FileOperateErr, UserFileId, VirtualPathErr};
 use crate::domain::file_system::service_upload::UploadTaskId;
 use crate::domain::user::user::UserId;
@@ -163,7 +163,6 @@ pub fn actix_config(cfg: &mut web::ServiceConfig) {
             .service(web::resource("/finish_upload").route(web::post().to(upload_finished)))
             // from factory
             .service(web::resource("/file_parsed").route(web::post().to(file_parsed)))
-            .service(web::resource("/transcode_result").route(web::post().to(transcode_done)))
             .service(
                 web::resource("/thumbnail_generated").route(web::post().to(thumbnail_generated)),
             ),
@@ -460,13 +459,6 @@ async fn thumbnail_generated(params: Json<TaskResult<()>>) -> ApiResult<()> {
         Err(err) => {
             warn!(%err, "generate thumbnail failed");
         }
-    }
-    ApiResponse::Ok(())
-}
-
-async fn transcode_done(params: Json<TaskResult<()>>) -> ApiResult<()> {
-    if let Err(err) = transcode::task_done(params.into_inner()).await {
-        warn!(?err, "transcode done failed");
     }
     ApiResponse::Ok(())
 }

@@ -1,10 +1,13 @@
 use actix_identity::Identity;
 use actix_web::web::{self, Json};
 use serde::Deserialize;
+use tracing::warn;
 use utils::code;
 
 use crate::{
-    application::transcode::{self, CreateOrderErr, CreateOrderResp, TranscodeParamsDto},
+    application::transcode::{
+        self, CreateOrderErr, CreateOrderResp, TaskResult, TranscodeParamsDto,
+    },
     domain::user::user::UserId,
     http::{ApiError, ApiResponse, ApiResult},
     status_doc,
@@ -38,6 +41,7 @@ status_doc!();
 pub fn config(cfg: &mut web::ServiceConfig) {
     cfg.service(
         web::scope("/api/order")
+            .service(web::resource("/transcode_result").route(web::post().to(transcode_done)))
             .service(web::resource("/create").route(web::post().to(create_order))),
     );
 }
@@ -54,4 +58,11 @@ pub async fn create_order(
     let id = id.id()?.parse::<UserId>()?;
     let resp = transcode::create_order(id, params.into_inner().params).await??;
     ApiResponse::Ok(resp)
+}
+
+async fn transcode_done(params: Json<TaskResult<()>>) -> ApiResult<()> {
+    if let Err(err) = transcode::task_done(params.into_inner()).await {
+        warn!(?err, "transcode done failed");
+    }
+    ApiResponse::Ok(())
 }
