@@ -4,6 +4,7 @@ pub mod av1_factory;
 pub mod email;
 pub mod file_sys;
 pub mod repo_employee;
+pub mod repo_order;
 pub mod repo_upload_task;
 pub mod repo_user;
 pub mod repo_user_file;

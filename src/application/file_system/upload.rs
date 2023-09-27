@@ -224,8 +224,8 @@ pub async fn upload_finished_tx(
 
     // generate user file
     let file_data = ensure_biz!(load_sys_file(&task).await?);
-    let sys_file_id = *file_data.id();
-    let file_data_path = file_data.archived_path().clone();
+    let sys_file_id = file_data.id;
+    let file_data_path = file_data.archived_path.clone();
     let thumbnail_dir = path_manager().thumbnail_dir(&file_data.hash);
     let file = ensure_biz!(parent.create_file(&task.path().file_name(), file_data));
 
@@ -280,8 +280,8 @@ async fn load_sys_file(task: &UploadTask) -> BizResult<FileNodeMetaData, FinishU
         // persist file
         let path = path_manager().archived_path(&merged.hash);
         let file = FileNodeMetaData::new(merged.size, merged.hash.clone(), path);
-        file_sys::create_dir_all(&file.archived_path().parent().unwrap()).await?;
-        merged.persist(file.archived_path()).await?;
+        file_sys::create_dir_all(&file.archived_path.parent().unwrap()).await?;
+        merged.persist(&file.archived_path).await?;
 
         biz_ok!(file)
     }

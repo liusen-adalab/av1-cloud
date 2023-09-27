@@ -1,7 +1,7 @@
 use std::{borrow::Cow, time::Duration};
 
 use crate::{
-    application::file_system::video_info::MediaInfo,
+    application::file_system::video_info::{AudioInfo, MediaInfo, VideoInfo},
     domain::{
         file_system::file::{
             convert::FileNodeConverter, FileNode, FileNodeMetaData, SysFileId, UserFileId,
@@ -15,14 +15,12 @@ use crate::{
 use anyhow::{ensure, Result};
 use derive_more::From;
 use diesel::{
-    debug_query,
     prelude::{Identifiable, Insertable, Queryable},
     result::OptionalExtension,
-    AsChangeset, ExpressionMethods, JoinOnDsl, QueryDsl, Selectable, SelectableHelper,
+    AsChangeset, ExpressionMethods, QueryDsl, Selectable, SelectableHelper,
 };
 use diesel_async::RunQueryDsl;
 use serde::{Deserialize, Serialize};
-use tracing::debug;
 use utils::db_pools::postgres::{pg_conn, PgConn};
 
 use super::EffectedRow;
@@ -60,6 +58,7 @@ pub struct FileNodePo<'a> {
 
 pub enum FileTypePo<'a> {
     File(SysFilePo<'a>),
+    Video(VideoPo),
     LazyFile(SysFileId),
     Dir(Vec<FileNodePo<'a>>),
 }
@@ -157,6 +156,7 @@ pub async fn save_node(node: &FileNode, conn: &mut PgConn) -> Result<EffectedRow
 
     let effected = diesel::insert_into(user_files::table)
         .values(&u_files)
+        .on_conflict_do_nothing()
         .execute(conn)
         .await?;
 
@@ -412,21 +412,100 @@ pub async fn update_file_matedata(
     Ok(())
 }
 
-pub(crate) async fn get_hash(id: UserFileId) -> Result<String> {
+pub(crate) async fn get_hash(id: UserFileId) -> Result<Option<String>> {
     let conn = &mut pg_conn().await?;
-    let hash = user_files::table
-        .inner_join(sys_files::table.on(sys_files::id.eq(user_files::id)))
-        .filter(user_files::id.eq(id))
-        .select(sys_files::hash);
-    let sql = debug_query::<diesel::pg::Pg, _>(&hash);
-    debug!(%sql, "getting hash of user-file");
-
     let hash = user_files::table
         .inner_join(sys_files::table)
         .filter(user_files::id.eq(id))
         .select(sys_files::hash)
         .get_result::<String>(conn)
-        .await?;
+        .await
+        .optional()?;
 
     Ok(hash)
+}
+
+#[derive(Queryable, Selectable, Identifiable, Debug)]
+#[diesel(table_name = sys_files)]
+struct VideoPoInner {
+    id: SysFileId,
+    hash: String,
+    path: String,
+    size: i64,
+    is_video: Option<bool>,
+    transcode_from: Option<SysFileId>,
+    bit_rate: Option<i32>,
+    duration_ms: Option<i32>,
+    height: Option<i32>,
+    width: Option<i32>,
+    video_info: Option<String>,
+    audio_info: Option<String>,
+}
+
+pub struct VideoPo {
+    pub id: SysFileId,
+    pub hash: String,
+    pub path: String,
+    pub size: i64,
+
+    pub is_video: Option<bool>,
+    pub transcode_from: Option<SysFileId>,
+    pub bit_rate: Option<i32>,
+    pub duration_ms: Option<i32>,
+    pub height: Option<i32>,
+    pub width: Option<i32>,
+    pub video_info: Option<VideoInfo>,
+    pub audio_info: Option<AudioInfo>,
+}
+
+impl VideoPo {
+    fn try_from_raw(video: VideoPoInner) -> Result<Self> {
+        let video_info = video
+            .video_info
+            .map(|s| serde_json::from_str(&s))
+            .transpose()?;
+        let audio_info = video
+            .audio_info
+            .map(|s| serde_json::from_str(&s))
+            .transpose()?;
+
+        Ok(Self {
+            id: video.id,
+            hash: video.hash,
+            path: video.path,
+            size: video.size,
+            is_video: video.is_video,
+            transcode_from: video.transcode_from,
+            bit_rate: video.bit_rate,
+            duration_ms: video.duration_ms,
+            height: video.height,
+            width: video.width,
+            video_info,
+            audio_info,
+        })
+    }
+}
+
+pub(crate) async fn find_video(id: UserFileId) -> Result<Option<FileNode>> {
+    let conn = &mut pg_conn().await?;
+    let res: Option<(UserFilePo, VideoPoInner)> = user_files::table
+        .inner_join(sys_files::table)
+        .filter(user_files::id.eq(id))
+        .select((UserFilePo::as_select(), VideoPoInner::as_select()))
+        .get_result::<(UserFilePo, VideoPoInner)>(conn)
+        .await
+        .optional()?;
+    let res = res
+        .map(|(user_file, video)| {
+            let video = VideoPo::try_from_raw(video)?;
+            let file_type = FileTypePo::Video(video);
+            anyhow::Ok(FileNodePo {
+                user_file,
+                file_type,
+            })
+        })
+        .transpose()?;
+
+    let res = res.map(FileNodeConverter::po_to_do).transpose()?;
+    Ok(res)
 }

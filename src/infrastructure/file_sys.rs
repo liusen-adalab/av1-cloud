@@ -6,7 +6,7 @@ use std::{
 };
 use tempfile::NamedTempFile;
 use tokio::{fs, io::AsyncWriteExt, task::spawn_blocking};
-use tracing::{debug, warn};
+use tracing::{debug, info, warn};
 
 use crate::domain::file_system::{file::VirtualPath, service::PathManager};
 
@@ -274,4 +274,40 @@ pub(crate) async fn child_file_names(dir: &Path) -> Result<Vec<String>> {
         names.push(name);
     }
     Ok(names)
+}
+
+pub struct DiskFile {
+    pub size: u64,
+    pub hash: String,
+}
+
+pub(crate) async fn load_file_meta(path: &Path) -> Result<Option<DiskFile>> {
+    debug!("loading file info from disk");
+    if !fs::try_exists(path).await? {
+        info!(?path, "file not found");
+        return Ok(None);
+    }
+
+    let meta = fs::metadata(path).await?;
+    let size = meta.len();
+
+    let mut file = std::fs::File::open(path)?;
+    let hash = tokio::task::spawn_blocking(move || {
+        let mut hasher = sha2::Sha256::new();
+        std::io::copy(&mut file, &mut hasher)?;
+        let hash = hasher.finalize();
+        Ok::<_, anyhow::Error>(hash)
+    })
+    .await??;
+    let hash = hex::encode(hash);
+
+    Ok(Some(DiskFile { size, hash }))
+}
+
+pub(crate) async fn move_to(from: &Path, to: &Path) -> Result<()> {
+    if let Some(parent) = to.parent() {
+        create_dir_all(parent).await?;
+    }
+    fs::rename(from, to).await?;
+    Ok(())
 }

@@ -7,6 +7,7 @@ use crate::http::{ApiResponse, ApiResult};
 
 pub mod employee;
 pub mod file_system;
+pub mod transcode;
 pub mod user;
 
 #[derive(Serialize)]
@@ -23,6 +24,7 @@ macro_rules! status_doc {
     () => {
         use super::StatusCode;
 
+        #[allow(unused)]
         pub async fn biz_status_doc() -> ApiResult<Vec<StatusCode>> {
             let doc = biz_status_doc_inner();
             ApiResponse::Ok(doc)
@@ -52,11 +54,13 @@ pub async fn doc() -> ApiResult<Vec<StatusCode>> {
     let user_doc = user::biz_status_doc_inner();
     let fs_doc = file_system::biz_status_doc_inner();
     let employee_doc = employee::biz_status_doc_inner();
+    let transcode_doc = transcode::biz_status_doc_inner();
 
     let mut doc = Vec::new();
     doc.extend(user_doc);
     doc.extend(fs_doc);
     doc.extend(employee_doc);
+    doc.extend(transcode_doc);
 
     let mut uniques = HashSet::new();
     doc.retain(|d| uniques.insert(d.code));

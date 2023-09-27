@@ -1,7 +1,8 @@
 use std::path::PathBuf;
 
-use crate::domain::file_system::file::FileOperateErr::*;
+use crate::domain::file_system::file::{FileNodeMetaData, FileOperateErr::*};
 use crate::domain::file_system::service::path_manager;
+use crate::infrastructure::av1_factory;
 use crate::{
     biz_ok,
     domain::{
@@ -16,7 +17,7 @@ use crate::{
     },
     pg_tx,
 };
-use anyhow::{bail, ensure, Result};
+use anyhow::{bail, ensure, Context, Result};
 use serde::Serialize;
 use tracing::debug;
 use utils::db_pools::postgres::{pg_conn, PgConn};
@@ -229,15 +230,60 @@ pub async fn copy_to_tx(
     biz_ok!(())
 }
 
-pub async fn thumbnail_names(file_id: UserFileId) -> Result<(String, Vec<String>)> {
-    let hash = repo_user_file::get_hash(file_id).await?;
+pub async fn thumbnail_names(file_id: UserFileId) -> Result<Option<(String, Vec<String>)>> {
+    let Some(hash) = repo_user_file::get_hash(file_id).await? else {
+        return Ok(None);
+    };
     let dir = path_manager().thumbnail_dir(&hash);
     let names = file_sys::child_file_names(&dir).await?;
 
-    Ok((hash, names))
+    Ok(Some((hash, names)))
 }
 
 pub fn thumbnail_path(hash: &str, file_name: &str) -> PathBuf {
     let dir = path_manager().thumbnail_dir(hash);
     dir.join(file_name)
+}
+
+pub(crate) async fn create_user_file(
+    src_path: PathBuf,
+    dst_path: VirtualPath,
+    conn: &mut PgConn,
+) -> Result<()> {
+    debug!("create user file");
+    let mut parent = dst_path.parent().expect("dst path must have parent");
+    let mut dir = loop {
+        let dir = repo_user_file::load_tree(&parent, 1, conn).await?;
+        if let Some(dir) = dir {
+            break dir;
+        }
+        parent = parent.parent().expect("dst path must have parent");
+    };
+
+    let parent = dir.create_dir_all(&dst_path.parent().unwrap());
+
+    let metadata = file_sys::load_file_meta(&src_path).await?.ok_or_else(|| {
+        anyhow::anyhow!("file not found: {}", src_path.to_string_lossy().to_string())
+    })?;
+    let archived_path = path_manager().archived_path(&metadata.hash);
+    let metadata = FileNodeMetaData::new(metadata.size, metadata.hash, archived_path);
+    let sys_file_id = metadata.id;
+    let thumbnail_dir = path_manager().thumbnail_dir(&metadata.hash);
+
+    debug!("move file to archived dir");
+    file_sys::move_to(&src_path, &metadata.archived_path).await?;
+
+    debug!("send parse req");
+    av1_factory::parse_file(sys_file_id, &metadata.archived_path)
+        .await
+        .context("send parse req")?;
+    debug!("send thumbnail req");
+    av1_factory::generate_thumbnail(sys_file_id, &metadata.archived_path, &thumbnail_dir)
+        .await
+        .context("send thumbnail req")?;
+
+    let _ = parent.create_file(dst_path.file_name(), metadata);
+    let _ = repo_user_file::save_node(&dir, conn).await?;
+
+    Ok(())
 }

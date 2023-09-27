@@ -58,6 +58,7 @@ pub async fn build_http_server() -> Result<Server> {
             .configure(employee::config)
             .configure(cqrs::actix_config)
             .configure(presentation::file_system::actix_config)
+            .configure(presentation::transcode::config)
             .route("/ping", web::get().to(http_ping))
             .wrap(casbin_middleware.clone())
             .wrap(auth::RoleExtractor)

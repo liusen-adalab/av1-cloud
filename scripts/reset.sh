@@ -16,7 +16,9 @@ done
 redis-cli -n 1 -h 10.0.10.59 flushdb
 
 # clear db
-/home/sen/.cargo/bin/diesel database reset --database-url postgres://postgres:postgres@10.0.10.85:5433/av1_cloud
+p_cmd="drop table if exists __diesel_schema_migrations, employees, sys_files, sys_files_id_seq, user_files, users;"
+PGPASSWORD=postgres psql -h 10.0.10.3 -p 30020 -U postgres -d av1_cloud -c "${p_cmd}"
+/home/sen/.cargo/bin/diesel migration run --database-url postgres://postgres:postgres@10.0.10.85:5433/av1_cloud
 
 # clear fs
 ssh web15 "rm -rf /storage/dev-av1_cloud-root/"

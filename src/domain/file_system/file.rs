@@ -36,13 +36,21 @@ pub enum FileType {
     LazyFile(SysFileId),
 }
 
-#[derive(Getters, Debug, Clone)]
-#[getset(get = "pub(crate)")]
+#[derive(Debug, Clone)]
 pub struct FileNodeMetaData {
     pub id: SysFileId,
     pub size: u64,
     pub hash: String,
     pub archived_path: PathBuf,
+    pub video_info: Option<VideoInfo>,
+}
+
+#[derive(Debug, Clone)]
+pub struct VideoInfo {
+    pub frame_count: u32,
+    pub width: u32,
+    pub height: u32,
+    pub hdr_format: Option<String>,
 }
 
 /// VirtualPath 是一个虚拟的路径，用以控制用户的文件访问权限
@@ -66,6 +74,7 @@ impl FileNodeMetaData {
             size,
             hash,
             archived_path,
+            video_info: None,
         }
     }
 }
@@ -130,6 +139,10 @@ impl FileNode {
         matches!(self.file_type, FileType::Dir(_))
     }
 
+    pub fn is_file(&self) -> bool {
+        matches!(self.file_type, FileType::File(_) | FileType::LazyFile(_))
+    }
+
     pub fn file_name(&self) -> &str {
         self.path.file_name()
     }
@@ -137,6 +150,21 @@ impl FileNode {
     // 只能在 /源视频 或 /已转码视频 下创建文件夹
     pub fn create_dir(&mut self, name: &str) -> Result<&mut Self, FileOperateErr> {
         self.create_child(name, None)
+    }
+
+    pub fn create_dir_all(&mut self, path: &VirtualPath) -> &mut Self {
+        let new = path
+            .path
+            .strip_prefix(&self.path.path)
+            .expect("path must be decendant");
+
+        let mut root = self;
+        for name in new.components() {
+            let name = name.as_os_str().to_str().unwrap();
+            root = root.create_dir(name).unwrap();
+        }
+
+        root
     }
 
     // 只能在 /源视频 或 /已转码视频 下创建文件
@@ -293,6 +321,14 @@ impl FileNode {
             Err(ParentNotDir)
         }
     }
+
+    pub fn file_data(&self) -> Option<&FileNodeMetaData> {
+        if let FileType::File(meta) = &self.file_type {
+            Some(meta)
+        } else {
+            None
+        }
+    }
 }
 
 use derive_more::Display;
@@ -331,6 +367,33 @@ impl VirtualPath {
             user_id,
             path: Path::new(Self::ENCODED_DIR_PATH).to_owned(),
         }
+    }
+
+    pub fn mirror_path(&self) -> Self {
+        dbg!(&self.path.to_str());
+        if self.path.starts_with(Self::SOURCE_DIR_PATH) {
+            let path = self.path.strip_prefix(Self::SOURCE_DIR_PATH).unwrap();
+            let prefix = Self::encode_dir(self.user_id);
+            let path = prefix.path.join(path);
+            Self {
+                user_id: self.user_id,
+                path,
+            }
+        } else {
+            let path = self.path.strip_prefix(Self::ENCODED_DIR_PATH).unwrap();
+            let prefix = Self::resource_dir(self.user_id);
+            let path = prefix.path.join(path);
+            Self {
+                user_id: self.user_id,
+                path,
+            }
+        }
+    }
+
+    pub fn set_file_name(&mut self, new_name: impl AsRef<OsStr>) -> Result<(), VirtualPathErr> {
+        ensure_ok!(self.allow_modified(), NotAllowed);
+        self.path.set_file_name(new_name);
+        Ok(())
     }
 
     fn is_source(&self) -> bool {
@@ -455,11 +518,27 @@ impl VirtualPath {
             .unwrap()
     }
 
+    pub fn file_stem(&self) -> &str {
+        self.path
+            .file_stem()
+            .unwrap_or_else(|| &OsStr::new("/"))
+            .to_str()
+            .unwrap()
+    }
+
     fn rename(&self, new_name: &str) -> Result<Self, VirtualPathErr> {
         let mut path = self.path.clone();
         path.set_file_name(new_name);
 
         Self::build(self.user_id, path)
+    }
+
+    pub fn parent(&self) -> Option<Self> {
+        let parent = self.path.parent()?;
+        Some(Self {
+            user_id: self.user_id,
+            path: parent.to_owned(),
+        })
     }
 
     pub fn parent_str(&self) -> Cow<str> {
@@ -490,7 +569,10 @@ pub mod convert {
     use anyhow::bail;
     use tracing::error;
 
-    use crate::infrastructure::repo_user_file::{FileNodePo, SysFilePo, UserFilePo};
+    use crate::{
+        domain::file_system::file::VideoInfo,
+        infrastructure::repo_user_file::{FileNodePo, SysFilePo, UserFilePo},
+    };
 
     use super::{FileNode, FileNodeMetaData, VirtualPath};
 
@@ -575,6 +657,7 @@ pub mod convert {
                         size: meta.size as u64,
                         hash: meta.hash.into_owned(),
                         archived_path: Path::new(&*meta.path).to_path_buf(),
+                        video_info: None,
                     };
                     crate::domain::file_system::file::FileType::File(meta)
                 }
@@ -587,6 +670,28 @@ pub mod convert {
                         children.push(Self::po_to_do(node)?);
                     }
                     crate::domain::file_system::file::FileType::Dir(children)
+                }
+                crate::infrastructure::repo_user_file::FileTypePo::Video(video) => {
+                    let v_info = video.video_info.and_then(|info| {
+                        info.FrameCount.and_then(|frame| {
+                            info.Width.and_then(|width| {
+                                info.Height.map(|height| VideoInfo {
+                                    frame_count: frame as u32,
+                                    width: width as u32,
+                                    height: height as u32,
+                                    hdr_format: info.HDR_Format,
+                                })
+                            })
+                        })
+                    });
+                    let meta = crate::domain::file_system::file::FileNodeMetaData {
+                        id: video.id,
+                        size: video.size as u64,
+                        hash: video.hash,
+                        archived_path: video.path.into(),
+                        video_info: v_info,
+                    };
+                    crate::domain::file_system::file::FileType::File(meta)
                 }
             };
             let node = FileNode {
@@ -613,6 +718,7 @@ pub mod convert {
                 size: size as u64,
                 hash: hash.into_owned(),
                 archived_path: Path::new(&*path).to_path_buf(),
+                video_info: None,
             }
         }
 
@@ -866,5 +972,34 @@ mod test {
         bb.delete().unwrap();
         assert!(bb.deleted);
         assert_eq!(bb.path().to_str(), format!("/deleted/{}/源视频/bb", bb.id));
+    }
+
+    #[test]
+    fn t_create_dir_all() {
+        let mut home = FileNode::user_home(1.into());
+        let (aa, _bb) = test_user_home(&mut home);
+        assert_eq!(aa.path().to_str(), "/源视频/aa");
+
+        let ccdd_path = &VirtualPath::build(1, "/源视频/aa/cc/dd").unwrap();
+        aa.create_dir_all(ccdd_path);
+
+        let aacc = aa.children().unwrap().get(0).unwrap();
+        let aaccdd = aacc.children().unwrap().get(0).unwrap();
+
+        assert_eq!(aaccdd.path().to_str(), "/源视频/aa/cc/dd");
+        assert_eq!(aaccdd.parent_id.unwrap(), aacc.id);
+    }
+
+    #[test]
+    fn t_mirror_path() {
+        let mut home = FileNode::user_home(1.into());
+        let (aa, _bb) = test_user_home(&mut home);
+        assert_eq!(aa.path().to_str(), "/源视频/aa");
+
+        let mirror = aa.path.mirror_path();
+        assert_eq!(mirror.to_str(), "/已转码视频/aa");
+
+        let mirror = mirror.mirror_path();
+        assert_eq!(mirror.to_str(), "/源视频/aa");
     }
 }

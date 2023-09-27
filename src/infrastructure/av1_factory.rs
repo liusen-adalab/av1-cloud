@@ -5,7 +5,13 @@ use tracing::debug;
 
 #[cfg(not(test))]
 use crate::settings::get_settings;
-use crate::{domain::file_system::file::SysFileId, id_wraper, post};
+use crate::{
+    domain::{
+        file_system::file::SysFileId,
+        transcode_order::{params::TranscodeTaskParams, TranscodeTaskId},
+    },
+    id_wraper, post,
+};
 
 id_wraper!(TaskId);
 
@@ -22,6 +28,7 @@ pub struct VideoTask<'a> {
 pub enum VideoTaskType<'a> {
     Parse(Parse<'a>),
     Thumbnail(Thumbnail<'a>),
+    Transcode(&'a TranscodeTaskParams),
 }
 
 #[derive(Serialize, Debug)]
@@ -74,6 +81,22 @@ pub(crate) async fn generate_thumbnail(
         id: TaskId::next_id().0,
         file_id: file_id.0,
         task: VideoTaskType::Thumbnail(Thumbnail { path, out_dir }),
+    };
+    send_task(task).await?;
+
+    Ok(())
+}
+
+pub(crate) async fn transcode(
+    task_id: TranscodeTaskId,
+    file_id: SysFileId,
+    params: &TranscodeTaskParams,
+) -> Result<()> {
+    debug!(%file_id, "sending transcode task request");
+    let task = VideoTask {
+        id: task_id.0,
+        file_id: file_id.0,
+        task: VideoTaskType::Transcode(params),
     };
     send_task(task).await?;
 

@@ -16,6 +16,16 @@ diesel::table! {
 }
 
 diesel::table! {
+    orders (id) {
+        id -> Int8,
+        user_id -> Int8,
+        status -> Int2,
+        create_at -> Timestamptz,
+        updated_at -> Timestamptz,
+    }
+}
+
+diesel::table! {
     sys_files (id) {
         id -> Int8,
         hash -> Varchar,
@@ -32,6 +42,22 @@ diesel::table! {
         general_info -> Nullable<Text>,
         video_info -> Nullable<Text>,
         audio_info -> Nullable<Text>,
+        create_at -> Timestamptz,
+        updated_at -> Timestamptz,
+    }
+}
+
+diesel::table! {
+    transcode_tasks (id) {
+        id -> Int8,
+        virtual_path -> Varchar,
+        sys_file_id -> Int8,
+        user_file_id -> Int8,
+        order_id -> Int8,
+        user_id -> Int8,
+        params -> Text,
+        status -> Int2,
+        err_msg -> Nullable<Text>,
         create_at -> Timestamptz,
         updated_at -> Timestamptz,
     }
@@ -67,4 +93,11 @@ diesel::table! {
     }
 }
 
-diesel::allow_tables_to_appear_in_same_query!(employees, sys_files, user_files, users,);
+diesel::allow_tables_to_appear_in_same_query!(
+    employees,
+    orders,
+    sys_files,
+    transcode_tasks,
+    user_files,
+    users,
+);

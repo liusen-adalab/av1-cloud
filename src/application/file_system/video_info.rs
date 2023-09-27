@@ -77,6 +77,9 @@ pub struct VideoInfo {
     FrameRate_Mode: Option<String>,
 
     #[serde(default)]
+    pub HDR_Format: Option<String>,
+
+    #[serde(default)]
     FrameRate: Option<f64>,
 
     #[serde(default)]

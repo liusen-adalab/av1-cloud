@@ -1,4 +1,5 @@
 pub mod file_system;
+pub mod transcode_order;
 pub mod user;
 
 #[macro_export]
@@ -68,9 +69,20 @@ macro_rules! id_wraper {
             where
                 D: ::serde::Deserializer<'de>,
             {
-                let id = String::deserialize(deserializer)?;
-                let id = id.parse().map_err(serde::de::Error::custom)?;
-                Ok(Self(id))
+                #[derive(serde::Deserialize)]
+                #[serde(untagged)]
+                enum StringOrInt {
+                    String(String),
+                    Int(i64),
+                }
+                let id = StringOrInt::deserialize(deserializer)?;
+                match id {
+                    StringOrInt::String(id) => {
+                        let id = id.parse().map_err(serde::de::Error::custom)?;
+                        Ok(Self(id))
+                    }
+                    StringOrInt::Int(id) => Ok(Self(id)),
+                }
             }
         }
     };
@@ -109,10 +121,14 @@ mod test {
         let next = UserId::next_id();
         let user_s = User { id: next };
 
-        let json = serde_json::to_string(&user_s).unwrap();
-        assert_eq!(json, format!(r#"{{"id":"{}"}}"#, next));
+        let json_str = serde_json::to_string(&user_s).unwrap();
+        assert_eq!(json_str, format!(r#"{{"id":"{}"}}"#, next));
 
-        let user_d: User = serde_json::from_str(&json).unwrap();
+        let user_d: User = serde_json::from_str(&json_str).unwrap();
+        assert_eq!(user_s, user_d);
+
+        let json_int = format!(r#"{{"id":{}}}"#, next.0);
+        let user_d: User = serde_json::from_str(&json_int).unwrap();
         assert_eq!(user_s, user_d);
     }
 }
