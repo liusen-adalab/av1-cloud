@@ -13,6 +13,7 @@ use actix_web::{
 use anyhow::{Context, Result};
 use settings::get_settings;
 use tracing::info;
+use utils::logger;
 
 use crate::{
     application::file_system,
@@ -28,7 +29,6 @@ mod presentation;
 pub mod auth;
 mod cqrs;
 pub mod http;
-pub mod logger;
 mod schema;
 pub mod settings;
 

@@ -51,9 +51,13 @@ script = '''
 wsl /home/sen/.cargo/bin/diesel migration generate ${@}
 '''
 
+[tasks.log]
+script = { file = "./scripts/log.sh" }
+
 ##############################
 [tasks.d]
 alias = "deploy"
 
 [tasks.n]
 alias = "nginx"
+script_runner = "@shell"

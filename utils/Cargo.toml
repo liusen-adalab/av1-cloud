@@ -17,6 +17,20 @@ redis.workspace = true
 serde.workspace = true
 tokio.workspace = true
 
+[dependencies.tracing-subscriber]
+version = "0.3.17"
+features = ["env-filter"]
+optional = true
+
+[dependencies.chrono]
+version = "0.4.26"
+default-features = false
+features = ["clock", "std", "serde"]
+optional = true
+
+[dependencies.tracing]
+version = "0.1.37"
+optional = true
 
 [features]
 default = []
@@ -24,3 +38,4 @@ keydb = ["redis/cluster-async"]
 redis = ["dep:deadpool-redis"]
 code = ["macros"]
 macros = ["dep:paste"]
+logger = ["dep:tracing-subscriber", "dep:chrono", "tracing"]

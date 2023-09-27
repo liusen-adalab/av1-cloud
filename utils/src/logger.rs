@@ -1,5 +1,3 @@
-use std::io::IsTerminal;
-
 use anyhow::Result;
 use serde::Deserialize;
 use tracing_subscriber::{
@@ -33,7 +31,6 @@ pub fn init(config: &Config) -> Result<()> {
             filter = filter.add_directive(d.parse().unwrap());
         }
         fmt::Layer::new()
-            .with_ansi(std::io::stdout().is_terminal())
             .with_timer(LocalTimer)
             .with_target(true)
             .with_writer(std::io::stdout)

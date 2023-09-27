@@ -15,7 +15,7 @@ use crate::{
 
 #[derive(Deserialize, Debug)]
 pub struct Settings {
-    pub log: crate::logger::Config,
+    pub log: utils::logger::Config,
     pub http_server: HttpServer,
 
     #[cfg(feature = "keydb")]
