@@ -11,14 +11,8 @@ dependencies = ["sync"]
 script = { file = "./scripts/deploy.sh" }
 
 [tasks.nginx]
-script = '''
-for i in {13..14}
-do
-    server=web${i}
-    scp scripts/nginx/nginx.conf ${server}:/etc/nginx/
-    ssh ${server} "nginx -s reload"
-done
-'''
+dependencies = ["sync"]
+script = { file = "./scripts/nginx/reload.sh" }
 
 [tasks.reset]
 dependencies = ["sync"]
