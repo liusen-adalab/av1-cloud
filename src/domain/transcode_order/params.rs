@@ -10,6 +10,7 @@ pub struct TranscodeTaskParams {
     pub path: PathBuf,
     pub dst_path: PathBuf,
     pub frame_count: u32,
+    pub is_h264: bool,
 
     pub container: ContainerFormat,
     pub video: ZcodeProcessParams,

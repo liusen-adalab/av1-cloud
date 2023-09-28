@@ -51,6 +51,7 @@ pub struct VideoInfo {
     pub width: u32,
     pub height: u32,
     pub hdr_format: Option<String>,
+    pub is_h264: bool,
 }
 
 /// VirtualPath 是一个虚拟的路径，用以控制用户的文件访问权限
@@ -680,6 +681,7 @@ pub mod convert {
                                     width: width as u32,
                                     height: height as u32,
                                     hdr_format: info.HDR_Format,
+                                    is_h264: video.is_h264,
                                 })
                             })
                         })

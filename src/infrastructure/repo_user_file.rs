@@ -454,6 +454,7 @@ pub struct VideoPo {
     pub duration_ms: Option<i32>,
     pub height: Option<i32>,
     pub width: Option<i32>,
+    pub is_h264: bool,
     pub video_info: Option<VideoInfo>,
     pub audio_info: Option<AudioInfo>,
 }
@@ -462,8 +463,13 @@ impl VideoPo {
     fn try_from_raw(video: VideoPoInner) -> Result<Self> {
         let video_info = video
             .video_info
-            .map(|s| serde_json::from_str(&s))
+            .map(|s| serde_json::from_str::<VideoInfo>(&s))
             .transpose()?;
+        let is_h264 = video_info
+            .as_ref()
+            .and_then(|v| v.Format.as_ref())
+            .is_some_and(|format| format.eq_ignore_ascii_case("avc"));
+
         let audio_info = video
             .audio_info
             .map(|s| serde_json::from_str(&s))
@@ -482,6 +488,7 @@ impl VideoPo {
             width: video.width,
             video_info,
             audio_info,
+            is_h264,
         })
     }
 }

@@ -122,6 +122,7 @@ fn to_task_params(
         video: video_params,
         audio: param.audio,
         container: param.container_format,
+        is_h264: video.is_h264,
     };
     task_params
 }
