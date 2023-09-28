@@ -9,9 +9,11 @@ use diesel_async::RunQueryDsl;
 use utils::db_pools::postgres::pg_conn;
 
 use crate::domain::file_system::file::UserFileId;
+use crate::domain::transcode_order::TranscodeTaskId;
 use crate::schema::users;
 
 use super::file_system::{DirContent, UserFile};
+use super::transcode::TranscodeTask;
 use super::{MillionTimestamp, Paginate};
 
 use crate::domain::user::user::UserId;
@@ -58,6 +60,11 @@ impl User {
     /// 获取用户文件
     async fn file(&self, id: UserFileId) -> Result<Option<UserFile>> {
         Ok(UserFile::find(id).await?)
+    }
+
+    /// 获取正在运行的转码任务
+    async fn running_tasks(&self) -> Result<Vec<TranscodeTaskId>> {
+        Ok(TranscodeTask::running_tasks(self.id).await?)
     }
 }
 

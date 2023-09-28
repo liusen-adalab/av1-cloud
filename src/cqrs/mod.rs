@@ -9,6 +9,7 @@ use async_graphql_actix_web::{GraphQLRequest, GraphQLResponse};
 use serde::{Deserialize, Serialize};
 
 pub mod file_system;
+pub mod transcode;
 pub(crate) mod user;
 
 pub fn actix_config(cfg: &mut web::ServiceConfig) {
